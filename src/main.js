@@ -263,17 +263,19 @@ function drawPlayHud(c) {
     c.fillStyle = '#e8e2d6'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `700 ${Math.round(h * 0.42)}px ${FONT}`;
     c.fillText('‹ もどる', x + w / 2, y + h / 2);
   });
-  // ステージ名
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillStyle = '#ffd34d'; c.font = `800 ${Math.round(layout.hud * 0.34)}px ${FONT}`;
-  c.fillText(`${STAGE_ICON[round.stage]} ${STAGE_NAME[round.stage]}`, W / 2, cy);
-  // すすみ具合バー
+  // すすみ具合バー（ステージ名は廃止。カウント＋バーを HUD 内で縦中央そろえ）
   const total = round.queue.length, frac = round.index / total;
-  const mw = Math.min(260, W * 0.26), mx = W / 2 - mw / 2, my = cy + layout.hud * 0.26;
-  c.fillStyle = '#1c1814'; roundRect(c, mx, my, mw, 10, 5); c.fill();
-  c.fillStyle = '#3fd6a0'; roundRect(c, mx, my, Math.max(6, mw * frac), 10, 5); c.fill();
-  c.fillStyle = '#cfc8ba'; c.font = `700 ${Math.round(layout.hud * 0.2)}px ${FONT}`;
-  c.fillText(`${round.index} / ${total}`, W / 2, my - 9);
+  const barH = 12;
+  const mw = Math.min(300, W * 0.30), mx = W / 2 - mw / 2;
+  const countFont = Math.round(layout.hud * 0.24);
+  const gap = Math.max(3, Math.round(layout.hud * 0.06));
+  const groupTop = cy - (countFont + gap + barH) / 2;
+  const my = groupTop + countFont + gap;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillStyle = '#cfc8ba'; c.font = `700 ${countFont}px ${FONT}`;
+  c.fillText(`${round.index} / ${total}`, W / 2, groupTop + countFont / 2);
+  c.fillStyle = '#1c1814'; roundRect(c, mx, my, mw, barH, barH / 2); c.fill();
+  c.fillStyle = '#3fd6a0'; roundRect(c, mx, my, Math.max(6, mw * frac), barH, barH / 2); c.fill();
   muteBtn(c);
 }
 
