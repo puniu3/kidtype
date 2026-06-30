@@ -21,7 +21,11 @@ html, body {
 
 #game {
   display: block;
+  /* JS が実ピクセルで上書きするが、その間隙の保険として dvh/dvw を使う。
+     dvh は動的ビューポート＝PWA スタンドアロンの可視領域を追従するので、
+     canvas の表示ボックスが下端の余白を残さない（100vh だと取りこぼすことがある）。 */
   width: 100vw; height: 100vh;
+  width: 100dvw; height: 100dvh;
   /* iPad の外付けキーボード前提なので拡大ジェスチャ無効化を補強 */
   touch-action: none;
 }

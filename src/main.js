@@ -63,7 +63,14 @@ function addTotal(n) {
 // ---------- レイアウト ----------
 function resize() {
   DPR = Math.min(2, window.devicePixelRatio || 1);
-  W = window.innerWidth; H = window.innerHeight;
+  // iPad の PWA スタンドアロンでは window.innerHeight が実際の可視ビューポートより
+  // 短いことがある。そのまま canvas を innerHeight にすると下端に隙間ができ、
+  // 画面背景（土色）が dim オーバーレイの外にのぞく＝「余白がカバーされない」。
+  // 取得できる高さの最大値を採り、canvas を必ず可視領域いっぱいに広げる
+  // （オーバーは body overflow:hidden でクリップされるだけで無害。アンダーが致命的）。
+  const vv = window.visualViewport;
+  W = Math.max(window.innerWidth, document.documentElement.clientWidth, vv ? Math.round(vv.width) : 0);
+  H = Math.max(window.innerHeight, document.documentElement.clientHeight, vv ? Math.round(vv.height) : 0);
   canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -84,6 +91,13 @@ function resize() {
   keyboard.setArea(layout.kb.x, layout.kb.y, layout.kb.w, layout.kb.h);
 }
 window.addEventListener('resize', resize);
+// スタンドアロン/iOS で可視ビューポートが変わる契機を網羅（resize だけでは取りこぼす）。
+window.addEventListener('orientationchange', resize);
+window.addEventListener('pageshow', resize);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', resize);
+  window.visualViewport.addEventListener('scroll', resize);
+}
 
 // ---------- ラウンド構築 ----------
 // プール「全体」から毎ラウンド出題する（拡充コーパスの新語も実プレイに出るように）。
