@@ -153,6 +153,13 @@ function completeItem() {
 }
 
 function onKeyDown(e) {
+  // 開発者用裏口（隠しコマンド）: Ctrl+Shift+R で累計進捗(育つ家)をリセット。画面表示なし。
+  if (e.ctrlKey && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+    e.preventDefault();
+    try { localStorage.removeItem('kidtype:total'); } catch (_) {}
+    scene.setTotal(0); // タイトル背景の家を即さらちへ
+    return;
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key;
   if (['Tab', 'Backspace', ' '].includes(k)) e.preventDefault();
