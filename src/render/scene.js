@@ -675,7 +675,8 @@ export class Scene {
     ctx.restore();
   }
 
-  // 掘り出されたダイヤ：カット宝石本体 + 放射光 + 走るきらめき。
+  // 掘り出されたダイヤ：ボクセル(立方体積み)の宝石本体 + ブロックのきらめき。
+  // ゲーム全体のブロック調に合わせ、なめらかなカット宝石ではなく四角いブロックの集まりで描く。
   _drawDiamond(ctx, d) {
     const R = Math.max(11, this.h * 0.05);
     const t = d.t;
@@ -689,48 +690,65 @@ export class Scene {
     ctx.translate(d.x, d.y);
     ctx.scale(Math.max(0, sc), Math.max(0, sc));
 
-    // 放射する光のすじ（ゆっくり回りながら点滅。控えめにしてストロボ感を出さない）
-    ctx.save();
-    ctx.rotate(t * 0.5);
-    ctx.globalAlpha = fade * (0.16 + 0.10 * Math.sin(t * 9));
-    ctx.fillStyle = '#d4f8ff';
-    const rays = 8, rlen = R * 2.7;
-    for (let i = 0; i < rays; i++) {
-      ctx.rotate((Math.PI * 2) / rays);
-      ctx.beginPath();
-      ctx.moveTo(-R * 0.12, -R * 0.9); ctx.lineTo(0, -rlen); ctx.lineTo(R * 0.12, -R * 0.9);
-      ctx.closePath(); ctx.fill();
-    }
-    ctx.restore();
+    // 宝石のシルエット（'#'=ブロックあり）。上は平らなテーブル面、中ほどが最も広く、下はとがった底。
+    const GRID = [
+      '  #####  ',
+      ' ####### ',
+      '#########',
+      '#########',
+      ' ####### ',
+      ' ####### ',
+      '  #####  ',
+      '   ###   ',
+      '    #    ',
+    ];
+    const GW = 9, GH = GRID.length, mid = 4;                  // 列中心
+    const cell = R * 0.27;                                    // ブロック1個の大きさ（チャンキー）
+    const ox = -(GW * cell) / 2, oy = -(GH * cell) / 2;       // 原点（d.x,d.y を中心に）
+    const at = (gx, gy) => (gy >= 0 && gy < GH && gx >= 0 && gx < GW && GRID[gy][gx] === '#');
+    const edge = Math.max(2, cell * 0.24);                    // ブロック上面/側面シェードの厚み
 
-    // 宝石本体（八面体のカット宝石。左面=暗・右面=明・上のテーブル面=最も明るい）
-    const top = -R, bot = R * 1.18, mx = R * 0.72, ty = -R * 0.45;
+    // 面シェード：上段=テーブル面(明)、それ以外は左=影 / 右=光 / 中央の稜線=中間。Minecraft 風。
+    const C_TABLE_HI = '#e8feff', C_TABLE = '#bff4ff';
+    const C_LEFT = '#2f9fc2', C_MID = '#5fd6e6', C_RIGHT = '#54d6e8';
     ctx.globalAlpha = fade;
-    ctx.fillStyle = '#2f9fc2';                                // 左面（影）
-    ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(-mx, 0); ctx.lineTo(0, bot); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#54d6e8';                                // 右面（光）
-    ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(mx, 0); ctx.lineTo(0, bot); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#bff4ff';                                // 上のテーブル面
-    ctx.beginPath();
-    ctx.moveTo(0, top); ctx.lineTo(-mx * 0.6, ty); ctx.lineTo(0, ty * 0.4); ctx.lineTo(mx * 0.6, ty);
-    ctx.closePath(); ctx.fill();
-    ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(1.5, R * 0.10); ctx.strokeStyle = '#176a86';
-    ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(mx, 0); ctx.lineTo(0, bot); ctx.lineTo(-mx, 0); ctx.closePath(); ctx.stroke();
+    for (let gy = 0; gy < GH; gy++) {
+      for (let gx = 0; gx < GW; gx++) {
+        if (!at(gx, gy)) continue;
+        const x = ox + gx * cell, y = oy + gy * cell;
+        let col;
+        if (gy <= 1) col = gy === 0 ? C_TABLE_HI : C_TABLE;  // テーブル面（最も明るい）
+        else if (gx < mid) col = C_LEFT;                     // 左面（影）
+        else if (gx > mid) col = C_RIGHT;                    // 右面（光）
+        else col = C_MID;                                    // 中央の稜線
+        this._blk(ctx, x, y, cell + 1, cell + 1, col);       // +1 で継ぎ目をなくす
+        // 立方体シェード：上が空ならブロック上面の光、右/下が空なら影。家・壁と同じ流儀。
+        if (!at(gx, gy - 1)) this._blk(ctx, x, y, cell + 1, edge, 'rgba(255,255,255,0.22)');
+        if (!at(gx + 1, gy)) this._blk(ctx, x + cell - edge, y, edge, cell + 1, 'rgba(0,0,0,0.18)');
+        if (!at(gx, gy + 1)) this._blk(ctx, x, y + cell - edge, cell + 1, edge, 'rgba(0,0,0,0.16)');
+      }
+    }
 
-    // 表面を左右に走るきらめき
-    const sx = Math.sin(t * 4) * R * 0.42;
-    ctx.globalAlpha = fade * (0.5 + 0.4 * Math.sin(t * 8));
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.moveTo(sx, -R * 0.55); ctx.lineTo(sx + R * 0.16, -R * 0.28); ctx.lineTo(sx, -R * 0.02); ctx.lineTo(sx - R * 0.16, -R * 0.28);
-    ctx.closePath(); ctx.fill();
+    // テーブル面で瞬く白いブロックの輝き（specular）。なめらかな放射光は使わない。
+    const glint = 0.5 + 0.5 * Math.sin(t * 7);
+    ctx.globalAlpha = fade * (0.35 + 0.5 * glint);
+    this._blk(ctx, ox + 2 * cell, oy + 1 * cell, cell + 1, cell + 1, '#ffffff');
 
-    // 角で瞬く 4 方向のスター
-    const stw = 0.5 + 0.5 * Math.sin(t * 10);
-    ctx.globalAlpha = fade * stw;
-    const spx = R * 0.5, spy = -R * 0.7, ss = R * 0.5 * (0.6 + stw * 0.6);
-    ctx.fillRect(spx - ss / 2, spy - ss * 0.12, ss, ss * 0.24);
-    ctx.fillRect(spx - ss * 0.12, spy - ss / 2, ss * 0.24, ss);
+    // 角でまたたくブロックのスター（十字のピクセル・きらめき）。
+    const sparks = [
+      { sx: 4.5, sy: -1.0, ph: 0 },        // 上
+      { sx: 9.0, sy: 1.6,  ph: 2.1 },      // 右
+      { sx: 0.0, sy: 5.2,  ph: 4.0 },      // 左下
+    ];
+    for (const s of sparks) {
+      const tw = 0.5 + 0.5 * Math.sin(t * 10 + s.ph);
+      ctx.globalAlpha = fade * tw;
+      ctx.fillStyle = tw > 0.6 ? '#ffffff' : '#bff6ff';
+      const px = ox + s.sx * cell, py = oy + s.sy * cell;
+      const ss = cell * (0.55 + tw * 0.85), arm = Math.max(2, ss * 0.3);
+      ctx.fillRect(Math.round(px - ss / 2), Math.round(py - arm / 2), Math.round(ss), Math.round(arm)); // 横
+      ctx.fillRect(Math.round(px - arm / 2), Math.round(py - ss / 2), Math.round(arm), Math.round(ss)); // 縦
+    }
 
     ctx.restore();
   }
