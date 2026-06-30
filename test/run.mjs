@@ -337,6 +337,60 @@ rejects('ぱん や', 'panya');
   delete global.window; delete global.document; delete global.localStorage;
 }
 
+// ---- score.js: 得点設計（正確 かつ 速いほど高得点・ミスは得点に寄与しない）----
+// 値そのものでなく「意図」を検証する性質テスト。computeScore/computeStars は純粋関数。
+{
+  const { computeScore, computeStars } = await import('../src/engine/score.js');
+
+  // (1) 同じ keysOk / timeMs でミスが増えるほど厳密に減点される（ミスはコスト）。
+  {
+    let prev = Infinity, mono = true;
+    for (let err = 0; err <= 3; err++) {
+      const s = computeScore({ keysOk: 30, keysErr: err, timeMs: 30000 });
+      if (!(s < prev)) mono = false;
+      prev = s;
+    }
+    ok(mono, 'more mistypes ⇒ strictly lower score (same keysOk/timeMs)');
+  }
+
+  // (2) 完璧(誤0) は 同じ keysOk で誤りありより高得点。
+  {
+    const perfect = computeScore({ keysOk: 30, keysErr: 0, timeMs: 30000 });
+    const sloppy = computeScore({ keysOk: 30, keysErr: 5, timeMs: 30000 });
+    ok(perfect > sloppy, 'perfect round beats same keysOk with several errors');
+  }
+
+  // (3) 同じ keysOk / 同じ正確率(誤0) で速いほど高得点。
+  {
+    const slow = computeScore({ keysOk: 30, keysErr: 0, timeMs: 30000 }); // 1000ms/打鍵
+    const fast = computeScore({ keysOk: 30, keysErr: 0, timeMs: 15000 }); //  500ms/打鍵
+    ok(fast > slow, 'faster (lower timeMs) ⇒ higher score');
+  }
+
+  // (4) 速いが雑(30ok/30err) は 丁寧(30ok/0err・やや遅い) を上回らない。
+  {
+    const sloppyFast = computeScore({ keysOk: 30, keysErr: 30, timeMs: 12000 }); //  400ms/打鍵
+    const carefulSlower = computeScore({ keysOk: 30, keysErr: 0, timeMs: 36000 }); // 1200ms/打鍵
+    ok(carefulSlower > sloppyFast, 'fast-but-sloppy does NOT beat careful-slightly-slower');
+  }
+
+  // (5) 得点は常に整数 ≥ 0。最後まで遊んだ初心者でも正の得点（0 で行き止まりにしない）。
+  {
+    const beginner = computeScore({ keysOk: 16, keysErr: 32, timeMs: 80000 });
+    ok(Number.isInteger(beginner) && beginner > 0, 'beginner who finishes earns positive integer points');
+    ok(computeScore({ keysOk: 0, keysErr: 5, timeMs: 1000 }) === 0, 'no correct keys ⇒ 0 (never negative)');
+  }
+
+  // (6) ★: 完走で1・高正確率で2・正確かつ速いで3。範囲は {1,2,3}。
+  {
+    eq(computeStars({ keysOk: 10, keysErr: 10, timeMs: 30000 }), 1, '低正確率 → ★1');
+    eq(computeStars({ keysOk: 17, keysErr: 3, timeMs: 60000 }), 2, '高正確率だが遅い → ★2');
+    eq(computeStars({ keysOk: 40, keysErr: 0, timeMs: 32000 }), 3, '完璧かつ速い → ★3');
+    const st = computeStars({ keysOk: 30, keysErr: 1, timeMs: 30000 });
+    ok(Number.isInteger(st) && st >= 1 && st <= 3, 'stars ∈ {1,2,3}');
+  }
+}
+
 // ---- 結果 ----
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) { console.log('\nFAILURES:'); for (const f of fails) console.log('  ✗ ' + f); process.exit(1); }
