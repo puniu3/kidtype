@@ -78,7 +78,9 @@ function resize() {
     kb: { x: W * 0.04, y: hud + worldH, w: W * 0.92, h: kbH },
     mute: { x: W - 60, y: (hud - 40) / 2, w: 44, h: 40 },
   };
-  scene.resize(layout.world.w, layout.world.h);
+  // 第3引数 = 実画面の下端（scene ローカル座標）。scene は world.y へ translate して描かれるので
+  // 画面下端は scene 内では H - world.y。土をここまで伸ばし、地面の下の空色のぞきを無くす。
+  scene.resize(layout.world.w, layout.world.h, H - layout.world.y);
   keyboard.setArea(layout.kb.x, layout.kb.y, layout.kb.w, layout.kb.h);
 }
 window.addEventListener('resize', resize);

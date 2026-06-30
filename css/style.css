@@ -4,7 +4,10 @@
 html, body {
   width: 100%; height: 100%;
   overflow: hidden;
-  background: #69b7ff;
+  /* canvas は毎フレーム透明クリアされるので、未描画部分はこの色が透ける。
+     PWA 全画面で余るのは「地面の下」なので、フォールバックは空色ではなく土色にする
+     （空は上端。空色だと地面の下に水色がのぞいて不自然に見える）。 */
+  background: #7a5230;
   /* タッチ操作の余計な挙動を全部止める */
   touch-action: none;
   overscroll-behavior: none;

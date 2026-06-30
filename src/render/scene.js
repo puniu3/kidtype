@@ -13,6 +13,8 @@ const SKY_TOP = '#69b7ff', SKY_BOT = '#bfeaff';
 export class Scene {
   constructor() {
     this.w = 0; this.h = 0; this.t = 0;
+    this.drawBottom = 0;       // 実画面の下端（scene ローカル座標）。土をここまで伸ばして
+                               // PWA 全画面で地面の下にページ背景がのぞくのを防ぐ。0 のときは this.h を使う。
     this.shake = 0;
     this.flash = 0;            // 間違い時の赤フラッシュ 0..1
     this.particles = [];
@@ -24,7 +26,9 @@ export class Scene {
     this.houseTier = 0;        // 現在の家 tier（0..N-1）
   }
 
-  resize(w, h) { this.w = w; this.h = h; this.focus = { x: w * 0.5, y: h * 0.3 }; }
+  // bottom = 実画面の下端（scene ローカル座標）。world 領域より下（キーボード帯）まで土を
+  // 伸ばすために main から H - world.y を受け取る。省略時は h（＝従来挙動）。
+  resize(w, h, bottom = h) { this.w = w; this.h = h; this.drawBottom = bottom; this.focus = { x: w * 0.5, y: h * 0.3 }; }
   setFocus(x, y) { this.focus.x = x; this.focus.y = y; }
 
   // 累計スコアを受け取り、背景の家 tier を更新する（新 tier を返す）。
@@ -136,11 +140,14 @@ export class Scene {
       ctx.fillRect(i * bw - 10, groundY - bh, bw + 1, bh);
     }
 
-    // 地面（草＋土）
+    // 地面（草＋土）。土は world 領域の高さ(H)ではなく「実画面の下端(drawBottom)」まで伸ばす。
+    // これで PWA 全画面（縦長/横長どちらでも）地面の下に空色のページ背景がのぞかない。
+    const dirtTop = groundY + H * 0.05;
+    const floor = Math.max(dirtTop + H, this.drawBottom) + 20;   // 実下端まで（＋わずかにオーバーシュート）
     ctx.fillStyle = '#5fa83a'; ctx.fillRect(-20, groundY, W + 40, H * 0.05);
-    ctx.fillStyle = '#7a5230'; ctx.fillRect(-20, groundY + H * 0.05, W + 40, H);
+    ctx.fillStyle = '#7a5230'; ctx.fillRect(-20, dirtTop, W + 40, floor - dirtTop);
     ctx.fillStyle = 'rgba(0,0,0,0.10)';
-    for (let x = 0; x < W; x += 36) for (let y = groundY + H * 0.08; y < H; y += 28)
+    for (let x = 0; x < W; x += 36) for (let y = groundY + H * 0.08; y < floor; y += 28)
       ctx.fillRect(x + ((y / 28) % 2) * 18, y, 6, 6);
 
     // 育つ家（村）— 丘の上の区画に、累計スコアの tier に応じた家を建てる。
