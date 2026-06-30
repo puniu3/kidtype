@@ -2,6 +2,11 @@
 // ターゲットのタイル列（main が上段に描く）が「採掘するブロック」そのもの。
 // このシーンは下段の地面・キャラ・パーティクル担当で、タイルには重ねない。
 // main から setFocus(現在タイルの中心) を受け、そこへ向けてキャラが振り、破片を飛ばす。
+//
+// 長期プログレス：背景に「育つ家(村)」を描く。main から累計スコアを setTotal() で受け取り、
+// milestones.houseLevelForTotal() で tier 0..N を決めて drawHouse() が段階に応じた家を描く。
+
+import { houseLevelForTotal, HOUSE_MILESTONES } from '../engine/milestones.js';
 
 const SKY_TOP = '#69b7ff', SKY_BOT = '#bfeaff';
 
@@ -15,10 +20,24 @@ export class Scene {
     this.focus = { x: 0, y: 0 }; // 採掘対象（現在タイル）の中心
     this.diamond = null;       // 完答リワード：掘り出されたダイヤ（湧いている間だけ非 null）
     this.gleam = null;         // 完答時の局所フラッシュ（拡がる閃光）
+    this.houseTotal = 0;       // 累計スコア（背景の家の進化に使う）
+    this.houseTier = 0;        // 現在の家 tier（0..N-1）
   }
 
   resize(w, h) { this.w = w; this.h = h; this.focus = { x: w * 0.5, y: h * 0.3 }; }
   setFocus(x, y) { this.focus.x = x; this.focus.y = y; }
+
+  // 累計スコアを受け取り、背景の家 tier を更新する（新 tier を返す）。
+  // main.js が milestones.js を直接 import せずに済むよう、変換はここに閉じ込める。
+  setTotal(total) {
+    this.houseTotal = Math.max(0, total | 0);
+    this.houseTier = houseLevelForTotal(this.houseTotal);
+    return this.houseTier;
+  }
+  // total → tier の純変換（main.js が tier 上がりを検出する用。import を増やさないための窓口）。
+  houseTierForTotal(total) { return houseLevelForTotal(total); }
+  // 現在の家の名前（表示用）。
+  currentHouseName() { return HOUSE_MILESTONES[this.houseTier].name; }
 
   hit() { this.swing = 1; this._burst(this.focus.x, this.focus.y, 6, ['#cdb98a', '#a98e5e', '#ffffff']); }
   miss() { this.shake = Math.max(this.shake, 7); this.flash = 1; this.swing = 0.5; }
@@ -124,6 +143,9 @@ export class Scene {
     for (let x = 0; x < W; x += 36) for (let y = groundY + H * 0.08; y < H; y += 28)
       ctx.fillRect(x + ((y / 28) % 2) * 18, y, 6, 6);
 
+    // 育つ家（村）— 丘の上の区画に、累計スコアの tier に応じた家を建てる。
+    this._drawHouse(ctx);
+
     this._drawCharacter(ctx, groundY);
 
     // 完答フラッシュ（局所・拡がる閃光）。ダイヤ・破片より奥に。
@@ -157,6 +179,200 @@ export class Scene {
 
     if (this.flash > 0) { ctx.fillStyle = `rgba(200,50,50,${this.flash * 0.16})`; ctx.fillRect(-20, -20, W + 40, H + 40); }
     ctx.restore();
+  }
+
+  // ===== 育つ家（村）=================================================
+  // 累計スコアの tier に応じて、丘の上の区画に建物を描く。
+  // 0:更地 1:小屋 2:小さな家 3:ちゃんとした家(煙突) 4:大きな家 5:城。
+  // ステージ選択カードに隠れないよう、丘の上（画面中ほど）に浮かせて配置する。
+  _drawHouse(ctx) {
+    const W = this.w, H = this.h;
+    const tier = Math.max(0, Math.min(HOUSE_MILESTONES.length - 1, this.houseTier | 0));
+    const u = Math.max(7, H * 0.05);      // ブロック単位
+    const cx = W * 0.5;                    // 区画の中心 x
+    const baseY = H * 0.645;               // 区画の地面ライン（丘の上）
+    const plotW = u * (5.5 + tier * 1.5);  // 区画は tier が上がるほど広く
+    this._plot(ctx, cx, baseY, plotW, u);
+    switch (tier) {
+      case 0: this._tier0(ctx, cx, baseY, u); break;
+      case 1: this._tier1(ctx, cx, baseY, u); break;
+      case 2: this._tier2(ctx, cx, baseY, u); break;
+      case 3: this._tier3(ctx, cx, baseY, u); break;
+      case 4: this._tier4(ctx, cx, baseY, u); break;
+      default: this._castle(ctx, cx, baseY, u); break;
+    }
+  }
+
+  // ピクセル(ブロック)1個。整数位置に置いてくっきり描く。
+  _blk(ctx, x, y, w, h, col) {
+    ctx.fillStyle = col;
+    ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
+  }
+
+  // 草＋土の土台プラットフォーム（村の区画）。
+  _plot(ctx, cx, baseY, w, u) {
+    const left = cx - w / 2;
+    const grassH = u * 0.45, dirtH = u * 1.0;
+    this._blk(ctx, left, baseY, w, grassH + dirtH, '#7a5230');      // 土
+    this._blk(ctx, left, baseY, w, grassH, '#5fa83a');             // 草の表面
+    this._blk(ctx, left, baseY, w, 2, '#74c34a');                 // 草のハイライト
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    for (let x = left + u * 0.4; x < left + w - u * 0.2; x += u * 0.9)
+      ctx.fillRect(Math.round(x), Math.round(baseY + grassH + u * 0.3), Math.max(2, u * 0.16), Math.max(2, u * 0.16));
+  }
+
+  // 板/壁の継ぎ目とライティング（立体感）。
+  _wallShade(ctx, x, y, w, h) {
+    ctx.fillStyle = 'rgba(0,0,0,0.07)';
+    for (let i = 1; i < 4; i++) ctx.fillRect(Math.round(x + (w * i) / 4), Math.round(y), 1, Math.round(h));
+    for (let j = 1; j < 3; j++) ctx.fillRect(Math.round(x), Math.round(y + (h * j) / 3), Math.round(w), 1);
+    this._blk(ctx, x, y, w, 2, 'rgba(255,255,255,0.10)');           // 上の光
+    this._blk(ctx, x + w - 2, y, 2, h, 'rgba(0,0,0,0.12)');         // 右の影
+  }
+
+  // 三角(階段状)の屋根。eaveY=壁の上端、baseW=軒幅。
+  _roof(ctx, cx, eaveY, baseW, u, colA, colB) {
+    const rowH = u * 0.55;
+    const rows = Math.max(3, Math.round(baseW / (u * 1.0)));
+    for (let i = 0; i < rows; i++) {
+      const w = baseW * (1 - i / rows);
+      this._blk(ctx, cx - w / 2, eaveY - (i + 1) * rowH, w, rowH + 1, i % 2 ? colA : colB);
+    }
+    this._blk(ctx, cx - baseW / 2, eaveY - rowH, baseW, 2, 'rgba(0,0,0,0.12)'); // 軒の影
+  }
+
+  _door(ctx, cx, baseY, w, h) {
+    this._blk(ctx, cx - w / 2, baseY - h, w, h, '#5a3a1c');
+    this._blk(ctx, cx - w / 2, baseY - h, w, h * 0.12, '#3a2614');                       // 上枠
+    this._blk(ctx, cx + w * 0.2, baseY - h * 0.55, Math.max(2, w * 0.13), Math.max(2, h * 0.08), '#e3c24a'); // ノブ
+  }
+
+  _window(ctx, cx, cy, s) {
+    this._blk(ctx, cx - s / 2, cy - s / 2, s, s, '#3a2a16');                    // 枠
+    this._blk(ctx, cx - s * 0.38, cy - s * 0.38, s * 0.76, s * 0.76, '#bfe9ff'); // ガラス
+    this._blk(ctx, cx - s * 0.32, cy - s * 0.32, s * 0.2, s * 0.2, '#ffffff');   // 反射
+    ctx.fillStyle = '#3a2a16';
+    ctx.fillRect(Math.round(cx - Math.max(1, s * 0.04)), Math.round(cy - s * 0.38), Math.max(2, s * 0.08), Math.round(s * 0.76));
+    ctx.fillRect(Math.round(cx - s * 0.38), Math.round(cy - Math.max(1, s * 0.04)), Math.round(s * 0.76), Math.max(2, s * 0.08));
+  }
+
+  // 煙突＋ゆらぐ煙。topY=屋根の基準（壁の上端）。
+  _chimney(ctx, x, topY, u) {
+    const cw = u * 0.9;
+    const chTop = topY - u * 1.05;
+    this._blk(ctx, x, chTop, cw, u * 3.4, '#8a5a4a');                 // 煉瓦
+    this._blk(ctx, x, chTop, cw, u * 0.4, 'rgba(0,0,0,0.15)');
+    this._blk(ctx, x - cw * 0.12, chTop, cw * 1.24, u * 0.4, '#6a4234'); // 笠
+    ctx.fillStyle = '#ededed';
+    for (let i = 0; i < 3; i++) {
+      const ph = (this.t * 0.45 + i / 3) % 1;
+      const sx = x + cw / 2 + Math.sin((this.t + i * 1.3) * 1.6) * cw * 0.7;
+      const sy = chTop - ph * u * 3.0;
+      const ss = cw * (0.45 + ph * 0.8);
+      ctx.globalAlpha = (1 - ph) * 0.5;
+      ctx.fillRect(Math.round(sx - ss / 2), Math.round(sy - ss / 2), Math.ceil(ss), Math.ceil(ss));
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // tier 0: 更地（建てる前の区画。杭と立て札だけ）。
+  _tier0(ctx, cx, baseY, u) {
+    this._blk(ctx, cx - u * 0.12, baseY - u * 1.7, u * 0.24, u * 1.7, '#8a5a2c'); // 杭
+    this._blk(ctx, cx - u * 0.55, baseY - u * 1.7, u * 1.1, u * 0.55, '#a06a34'); // 立て札
+    this._blk(ctx, cx - u * 0.55, baseY - u * 1.7, u * 1.1, 2, 'rgba(255,255,255,0.15)');
+    this._blk(ctx, cx + u * 1.3, baseY - u * 0.45, u * 0.8, u * 0.45, '#7a5230');  // 土の山
+  }
+
+  // tier 1: 掘立て小屋（板壁＋片流れ屋根＋暗い入口）。
+  _tier1(ctx, cx, baseY, u) {
+    const ww = u * 3.0, wh = u * 1.9, left = cx - ww / 2, top = baseY - wh;
+    this._blk(ctx, left, top, ww, wh, '#9a6a3c');
+    this._wallShade(ctx, left, top, ww, wh);
+    const steps = 3;
+    for (let i = 0; i < steps; i++)
+      this._blk(ctx, left - u * 0.3 + i * (ww / steps), top - u * 0.5 - i * u * 0.45, ww / steps + u * 0.4, u * 0.5, i % 2 ? '#6f4420' : '#5e3a1c');
+    this._blk(ctx, cx - u * 0.5, baseY - u * 1.2, u * 1.0, u * 1.2, '#3a2614');     // 入口
+  }
+
+  // tier 2: 小さな家（壁＋三角屋根＋ドア＋窓）。
+  _tier2(ctx, cx, baseY, u) {
+    const ww = u * 3.4, wh = u * 2.6, left = cx - ww / 2, top = baseY - wh;
+    this._blk(ctx, left, top, ww, wh, '#caa15e');
+    this._wallShade(ctx, left, top, ww, wh);
+    this._roof(ctx, cx, top, ww * 1.18, u, '#b14a36', '#9a3f2e');
+    this._door(ctx, cx - ww * 0.18, baseY, u * 1.0, wh * 0.5);
+    this._window(ctx, cx + ww * 0.24, top + wh * 0.38, u * 1.0);
+  }
+
+  // tier 3: ちゃんとした家（大きめ＋窓2つ＋煙突＋煙）。
+  _tier3(ctx, cx, baseY, u) {
+    const ww = u * 4.2, wh = u * 3.0, left = cx - ww / 2, top = baseY - wh;
+    this._blk(ctx, left, top, ww, wh, '#d8b06a');
+    this._wallShade(ctx, left, top, ww, wh);
+    this._chimney(ctx, cx + ww * 0.28, top, u);
+    this._roof(ctx, cx, top, ww * 1.2, u, '#b14a36', '#9a3f2e');
+    this._door(ctx, cx - ww * 0.2, baseY, u * 1.1, wh * 0.48);
+    this._window(ctx, cx + ww * 0.22, top + wh * 0.3, u * 1.05);
+    this._window(ctx, cx + ww * 0.22, baseY - wh * 0.26, u * 1.05);
+  }
+
+  // tier 4: 大きな家・屋敷（2階建ての帯＋窓4つ＋煙突）。
+  _tier4(ctx, cx, baseY, u) {
+    const ww = u * 5.2, wh = u * 4.0, left = cx - ww / 2, top = baseY - wh;
+    this._blk(ctx, left, top, ww, wh, '#e0c074');
+    this._wallShade(ctx, left, top, ww, wh);
+    this._blk(ctx, left, baseY - wh * 0.5, ww, u * 0.32, '#9a6a3c');   // 階の帯（梁）
+    this._chimney(ctx, cx + ww * 0.32, top, u * 1.05);
+    this._roof(ctx, cx, top, ww * 1.16, u, '#b14a36', '#9a3f2e');
+    this._door(ctx, cx, baseY, u * 1.2, wh * 0.4);
+    this._window(ctx, cx - ww * 0.3, top + wh * 0.17, u * 1.0);
+    this._window(ctx, cx + ww * 0.3, top + wh * 0.17, u * 1.0);
+    this._window(ctx, cx - ww * 0.3, baseY - wh * 0.3, u * 1.0);
+    this._window(ctx, cx + ww * 0.3, baseY - wh * 0.3, u * 1.0);
+  }
+
+  // tier 5: 城（石壁＋胸壁＋両端の塔＋門＋旗）。
+  _castle(ctx, cx, baseY, u) {
+    const ww = u * 5.6, wh = u * 3.4, left = cx - ww / 2, top = baseY - wh;
+    const stone = '#9aa0aa', stoneD = '#7d828c';
+    this._blk(ctx, left, top, ww, wh, stone);
+    // 石ブロックの目地
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    const rh = wh / 5;
+    for (let r = 0; r <= 5; r++) ctx.fillRect(Math.round(left), Math.round(top + r * rh), Math.round(ww), 2);
+    for (let r = 0; r < 5; r++) {
+      const off = (r % 2) ? ww * 0.12 : 0;
+      for (let x = left + off; x < left + ww; x += ww * 0.24) ctx.fillRect(Math.round(x), Math.round(top + r * rh), 2, Math.round(rh));
+    }
+    // 本体の胸壁（てっぺんの凸凹）
+    const m = ww / 9;
+    for (let i = 0; i <= 8; i += 2) this._blk(ctx, left + i * m, top - u * 0.7, m, u * 0.7, stoneD);
+    // 両端の塔
+    const tw = u * 1.5, th = wh + u * 1.3;
+    for (const tx of [left - tw * 0.5, left + ww - tw * 0.5]) {
+      this._blk(ctx, tx, baseY - th, tw, th, stone);
+      this._blk(ctx, tx, baseY - th, 2, th, 'rgba(255,255,255,0.12)');
+      this._blk(ctx, tx + tw - 2, baseY - th, 2, th, 'rgba(0,0,0,0.14)');
+      const tm = tw / 3;
+      for (let i = 0; i <= 2; i += 2) this._blk(ctx, tx + i * tm, baseY - th - u * 0.6, tm, u * 0.6, stoneD);
+      this._blk(ctx, tx + tw * 0.3, baseY - th * 0.72, tw * 0.4, u * 0.85, '#2a2a30'); // 塔の窓
+    }
+    // 門（暗いアーチ＋落とし格子）
+    const gw = ww * 0.26, gh = wh * 0.62;
+    this._blk(ctx, cx - gw / 2, baseY - gh, gw, gh, '#3a3138');
+    this._blk(ctx, cx - gw / 2 + 2, baseY - gh + 2, gw - 4, gh - 2, '#241f26');
+    ctx.fillStyle = 'rgba(190,190,200,0.5)';
+    for (let i = 1; i < 4; i++) ctx.fillRect(Math.round(cx - gw / 2 + (gw * i) / 4), Math.round(baseY - gh + 2), 2, Math.round(gh * 0.7));
+    // 旗（右の塔の上ではためく）
+    const ftx = left + ww - tw * 0.5 + tw / 2, fty = baseY - th - u * 0.6;
+    this._blk(ctx, ftx - 1, fty - u * 1.9, 2, u * 1.9, '#5a4a3a');     // ポール
+    const fw = u * 1.6, fh = u * 0.95, wave = Math.sin(this.t * 4) * fh * 0.2;
+    ctx.fillStyle = '#d23b3b';
+    ctx.beginPath();
+    ctx.moveTo(ftx + 1, fty - u * 1.9);
+    ctx.lineTo(ftx + 1 + fw, fty - u * 1.9 + fh * 0.5 + wave);
+    ctx.lineTo(ftx + 1, fty - u * 1.9 + fh);
+    ctx.closePath(); ctx.fill();
   }
 
   // キャラは下段・左寄り。ピッケルを focus（現在タイル）へ向けて振る。

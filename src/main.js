@@ -47,6 +47,19 @@ function saveBest(stage, score, stars) {
   return score > b.score;
 }
 
+// ---------- 累計スコア（長期プログレス：背景の家を育てる）----------
+// 全プレイを通した「ためたスコア」。ラウンドごとに加算して保存し、
+// タイトル画面で表示＋背景の家(村)の進化に使う。
+function loadTotal() {
+  try { return Math.max(0, parseInt(localStorage.getItem('kidtype:total'), 10) || 0); }
+  catch (_) { return 0; }
+}
+function addTotal(n) {
+  const next = loadTotal() + Math.max(0, n | 0);
+  try { localStorage.setItem('kidtype:total', String(next)); } catch (_) {}
+  return next;
+}
+
 // ---------- レイアウト ----------
 function resize() {
   DPR = Math.min(2, window.devicePixelRatio || 1);
@@ -106,9 +119,13 @@ function finishRound() {
   // 得点・★・正確率は純粋関数 score.js に委譲（正確 かつ 速いほど高得点・ミスは寄与しない）。
   const { score, stars, accuracy } = scoreRound({ keysOk: round.keysOk, keysErr: round.keysErr, timeMs });
   const isNewBest = saveBest(round.stage, score, stars);
-  result = { stage: round.stage, timeMs, accuracy, score, stars, isNewBest, best: loadBest(round.stage) };
+  // 累計スコアに加算 → 家の tier が上がったか判定（tier 変換は Scene 経由で milestones を参照）。
+  const beforeTotal = loadTotal();
+  const afterTotal = addTotal(score);
+  const houseLeveledUp = scene.houseTierForTotal(afterTotal) > scene.houseTierForTotal(beforeTotal);
+  result = { stage: round.stage, timeMs, accuracy, score, stars, isNewBest, best: loadBest(round.stage), houseLeveledUp };
   screen = 'result';
-  if (stars >= 3) sfx.stageup(); else sfx.levelup();
+  if (stars >= 3 || houseLeveledUp) sfx.stageup(); else sfx.levelup();
   scene.celebrate();
 }
 
@@ -278,6 +295,9 @@ function drawPlay(c) {
 
 // ---------- 画面: タイトル（ステージ選択）----------
 function drawTitle(c) {
+  // 累計スコアを Scene に渡す → 背景の家 tier を更新（家の進化はここで反映）。
+  const total = loadTotal();
+  scene.setTotal(total);
   c.save(); c.translate(layout.world.x, layout.world.y); scene.draw(c); c.restore();
   c.fillStyle = 'rgba(20,16,12,0.5)'; c.fillRect(0, 0, W, H);
   c.textAlign = 'center'; c.textBaseline = 'middle';
@@ -285,6 +305,14 @@ function drawTitle(c) {
   c.fillText('ブロック タイピング', W / 2, H * 0.16);
   c.fillStyle = '#e8e2d6'; c.font = `700 ${Math.round(Math.min(26, W * 0.032))}px ${FONT}`;
   c.fillText('すきな ステージを えらんでね', W / 2, H * 0.16 + 50);
+
+  // ためたスコア（長期プログレス）＋ いまのおうち。
+  const totalStr = String(total).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const ty = H * 0.16 + 92;
+  c.fillStyle = '#ffe9a8'; c.font = `800 ${Math.round(Math.min(30, W * 0.036))}px ${FONT}`;
+  c.fillText(`💎 ためた スコア  ${totalStr}`, W / 2, ty);
+  c.fillStyle = 'rgba(255,255,255,0.82)'; c.font = `700 ${Math.round(Math.min(20, W * 0.024))}px ${FONT}`;
+  c.fillText(`いまの おうち：${scene.currentHouseName()}`, W / 2, ty + 28);
 
   // 4枚のステージカード
   const cols = 4, gap = Math.min(28, W * 0.025);

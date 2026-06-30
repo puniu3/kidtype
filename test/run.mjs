@@ -454,6 +454,53 @@ rejects('ぱん や', 'panya');
   }
 }
 
+// ---- milestones.js: 長期プログレス（累計スコア→家 tier）----
+// 純関数 houseLevelForTotal / 配列 HOUSE_MILESTONES の不変条件を検証する。
+{
+  const { houseLevelForTotal, HOUSE_MILESTONES, houseName } = await import('../src/engine/milestones.js');
+
+  // (1) しきい値は厳密昇順。先頭は total=0（更地が tier 0）。
+  eq(HOUSE_MILESTONES[0].total, 0, 'first milestone threshold is 0 (empty lot)');
+  {
+    let asc = true;
+    for (let i = 1; i < HOUSE_MILESTONES.length; i++)
+      if (!(HOUSE_MILESTONES[i].total > HOUSE_MILESTONES[i - 1].total)) asc = false;
+    ok(asc, 'milestone thresholds are strictly ascending');
+  }
+  ok(HOUSE_MILESTONES.every((m) => typeof m.name === 'string' && m.name.length > 0), 'every tier has a name');
+
+  // (2) total=0 は tier 0。
+  eq(houseLevelForTotal(0), 0, 'total 0 → tier 0');
+
+  // (3) 各しきい値ちょうどでその tier に乗る／直前(-1)では一つ下に留まる。
+  for (let i = 0; i < HOUSE_MILESTONES.length; i++) {
+    eq(houseLevelForTotal(HOUSE_MILESTONES[i].total), i, `total == threshold[${i}] → tier ${i}`);
+    if (i > 0) eq(houseLevelForTotal(HOUSE_MILESTONES[i].total - 1), i - 1, `total just below threshold[${i}] → tier ${i - 1}`);
+  }
+
+  // (4) tier は total に対して単調非減少（途中の刻みでも下がらない）。
+  {
+    let prev = -1, mono = true;
+    for (let t = 0; t <= HOUSE_MILESTONES[HOUSE_MILESTONES.length - 1].total + 5000; t += 137) {
+      const tier = houseLevelForTotal(t);
+      if (tier < prev) mono = false;
+      prev = tier;
+    }
+    ok(mono, 'houseLevelForTotal is monotonically non-decreasing in total');
+  }
+
+  // (5) 最上位しきい値以上は必ず最上位 tier（城）に乗り、超過しても飛び出さない。
+  const top = HOUSE_MILESTONES.length - 1;
+  eq(houseLevelForTotal(HOUSE_MILESTONES[top].total), top, 'max threshold → top tier (城)');
+  eq(houseLevelForTotal(HOUSE_MILESTONES[top].total * 10), top, 'far beyond max stays at top tier (no overflow)');
+  eq(houseName(HOUSE_MILESTONES[top].total), HOUSE_MILESTONES[top].name, 'houseName returns top tier name at max');
+
+  // (6) 異常入力(負値・非数)は tier 0 に丸める。
+  eq(houseLevelForTotal(-500), 0, 'negative total → tier 0');
+  eq(houseLevelForTotal(NaN), 0, 'NaN total → tier 0');
+  eq(houseLevelForTotal(undefined), 0, 'undefined total → tier 0');
+}
+
 // ---- 結果 ----
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) { console.log('\nFAILURES:'); for (const f of fails) console.log('  ✗ ' + f); process.exit(1); }
