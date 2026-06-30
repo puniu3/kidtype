@@ -3,6 +3,7 @@ import { toChunks, canonicalRomaji, kanaToRomaji } from '../src/engine/romaji.js
 import { Matcher, matcherFor } from '../src/engine/matcher.js';
 import { Progress, Stage } from '../src/engine/progress.js';
 import { kataToHira } from '../src/engine/kana.js';
+import { WORDS, SENTENCES } from '../src/engine/content.js';
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -25,6 +26,35 @@ function accepts(target, seq) {
 function rejects(target, seq) {
   const { done } = typeAll(target, seq);
   ok(!done, `rejects(${target} <- "${seq}") but it completed`);
+}
+
+// ================= コーパス(content.js) 全エントリの打鍵可能性監査 =================
+// WORDS/SENTENCES の全エントリが romaji エンジンで最後まで打てることを保証する。
+// auto(空白) 以外のチャンクの options が全て ASCII でなければ、未対応かなが
+// literal として素通り＝打てない → FAIL（該当エントリ名と該当かなを表示）。
+{
+  const ASCII = /^[\x20-\x7e]+$/;
+  const typeable = (label, str) => {
+    for (const c of toChunks(str)) {
+      if (c.auto) continue; // 空白チャンクは打鍵不要なので除外
+      ok(c.options.every((o) => ASCII.test(o)),
+        `typeable: ${label} 「${c.kana}」 in "${str}" opts=${JSON.stringify(c.options)}`);
+    }
+  };
+  for (const w of WORDS) {
+    ok(typeof w.e === 'string' && w.e.length > 0, `WORD "${w.kana}" has emoji`);
+    ok(Number.isInteger(w.lv) && w.lv >= 1 && w.lv <= 4, `WORD "${w.kana}" lv in 1..4 (got ${w.lv})`);
+    typeable(`WORD "${w.kana}"`, w.kana);
+  }
+  for (const s of SENTENCES) {
+    ok(Number.isInteger(s.lv) && s.lv >= 1 && s.lv <= 4, `SENTENCE "${s.text}" lv in 1..4 (got ${s.lv})`);
+    typeable(`SENTENCE`, s.text);
+  }
+  // 重複検出（WORDS.kana / SENTENCES.text とも一意であること）
+  const wset = new Set(WORDS.map((w) => w.kana));
+  eq(wset.size, WORDS.length, 'WORDS kana are all unique (no duplicates)');
+  const sset = new Set(SENTENCES.map((s) => s.text));
+  eq(sset.size, SENTENCES.length, 'SENTENCES text are all unique (no duplicates)');
 }
 
 // ---- kana.js ----
