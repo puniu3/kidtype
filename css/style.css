@@ -1,0 +1,27 @@
+/* style.css — フルスクリーンの canvas ゲーム。タッチ衛生（iOS Safari 対策）を重視。 */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #69b7ff;
+  /* タッチ操作の余計な挙動を全部止める */
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /* iOS のタップ時グレーフラッシュを消す（押下フィードバックは自前で出す） */
+  -webkit-tap-highlight-color: transparent;
+  font-family: ui-rounded, "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif;
+}
+
+#game {
+  display: block;
+  width: 100vw; height: 100vh;
+  /* iPad の外付けキーボード前提なので拡大ジェスチャ無効化を補強 */
+  touch-action: none;
+}
+
+/* 念のため：iOS のダブルタップズーム等を抑制 */
+canvas { -webkit-user-select: none; user-select: none; }

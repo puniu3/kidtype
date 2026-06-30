@@ -1,0 +1,5 @@
+{
+  "build": ["node", "build.mjs", "--outDir", "{outDir}"],
+  "appSubpath": "",
+  "reviewPort": 8000
+}

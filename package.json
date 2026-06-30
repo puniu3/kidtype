@@ -1,0 +1,12 @@
+{
+  "name": "kidtype",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "7歳児向けタイピングゲーム (Minecraft風) — キー → ローマ字 → 単語 → 文章",
+  "scripts": {
+    "test": "node test/run.mjs",
+    "serve": "python3 serve.py 8011",
+    "build": "node build.mjs"
+  }
+}

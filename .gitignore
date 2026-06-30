@@ -1,0 +1,7 @@
+# butler working state (regenerable scratch — never committed)
+.butler/
+review/
+
+# misc
+node_modules/
+.DS_Store
