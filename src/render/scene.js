@@ -13,6 +13,8 @@ export class Scene {
     this.particles = [];
     this.swing = 0;            // ピッケル振り 0..1
     this.focus = { x: 0, y: 0 }; // 採掘対象（現在タイル）の中心
+    this.diamond = null;       // 完答リワード：掘り出されたダイヤ（湧いている間だけ非 null）
+    this.gleam = null;         // 完答時の局所フラッシュ（拡がる閃光）
   }
 
   resize(w, h) { this.w = w; this.h = h; this.focus = { x: w * 0.5, y: h * 0.3 }; }
@@ -22,8 +24,29 @@ export class Scene {
   miss() { this.shake = Math.max(this.shake, 7); this.flash = 1; this.swing = 0.5; }
   complete() {
     this.swing = 1;
-    this._burst(this.focus.x, this.focus.y, 26, ['#8a8a8a', '#bdbdbd', '#5fa83a', '#ffd34d']);
+    // 石ブロックがくだける破片（灰・土）→ その中からダイヤが現れる
+    this._burst(this.focus.x, this.focus.y, 18, ['#8a8a8a', '#bdbdbd', '#6f6f6f', '#9a8a6a']);
     this.shake = Math.max(this.shake, 9);
+    this._reveal(this.focus.x, this.focus.y);
+  }
+
+  // 採掘リワード：ブロックがくだけてダイヤが掘り出される瞬間。
+  _reveal(x, y) {
+    // ダイヤ本体（上にポンッと飛び出して、ふわっと浮かんで煌めく）
+    this.diamond = { x, y, x0: x, y0: y, t: 0, life: 1.4, max: 1.4 };
+    // 局所フラッシュ（一瞬の閃光・拡がって消える。全画面ストロボにはしない）
+    this.gleam = { x, y, t: 0, life: 0.55, max: 0.55 };
+    // ダイヤのかけら（水色のブロック破片が上向きに飛び散る）
+    this._burst(x, y, 14, ['#9af0ff', '#5fd6e6', '#cfffff', '#ffffff'], 4.4);
+    // キラキラ（落ちずにふわっと減速して瞬く粒）
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2, v = 1.4 + Math.random() * 2.6;
+      this.particles.push({
+        x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 1.4,
+        s: 2 + Math.random() * 3.5, life: 0.55 + Math.random() * 0.55,
+        col: Math.random() < 0.5 ? '#ffffff' : '#bff6ff', kind: 'spark', tw: Math.random() * 6.28,
+      });
+    }
   }
   celebrate() {
     for (let i = 0; i < 60; i++) {
@@ -49,8 +72,27 @@ export class Scene {
     this.flash = Math.max(0, this.flash - dt * 4);
     this.swing = Math.max(0, this.swing - dt * 5);
     const g = 26;
-    for (const p of this.particles) { p.vy += g * dt; p.x += p.vx; p.y += p.vy; p.life -= dt * 1.3; }
+    for (const p of this.particles) {
+      if (p.kind === 'spark') {           // きらめき：ふわっと減速して、ほんの少しだけ落ちる
+        p.vx *= 0.9; p.vy = p.vy * 0.9 + 6 * dt; p.x += p.vx; p.y += p.vy; p.life -= dt * 1.5;
+      } else {                            // 通常破片：重力で落ちる
+        p.vy += g * dt; p.x += p.vx; p.y += p.vy; p.life -= dt * 1.3;
+      }
+    }
     this.particles = this.particles.filter((p) => p.life > 0 && p.y < this.h + 30);
+
+    // ダイヤ：弧を描いて飛び出し → ふわふわ浮いて煌めく
+    if (this.diamond) {
+      const d = this.diamond; d.t += dt; d.life -= dt;
+      const peak = this.h * 0.24;        // ブロック（上に重なって描かれる）の上までしっかり飛び出す
+      const rise = d.t < 0.5 ? 1 - Math.pow(1 - d.t / 0.5, 3) : 1;           // ease-out で上昇
+      const hover = d.t < 0.5 ? 0 : Math.sin((d.t - 0.5) * 4) * this.h * 0.008; // 上昇後はふわふわ
+      d.y = d.y0 - peak * rise + hover;
+      d.x = d.x0 + Math.sin(d.t * 2.5) * this.w * 0.004;
+      if (d.life <= 0) this.diamond = null;
+    }
+    // フラッシュ
+    if (this.gleam) { this.gleam.t += dt; this.gleam.life -= dt; if (this.gleam.life <= 0) this.gleam = null; }
   }
 
   draw(ctx) {
@@ -84,10 +126,34 @@ export class Scene {
 
     this._drawCharacter(ctx, groundY);
 
+    // 完答フラッシュ（局所・拡がる閃光）。ダイヤ・破片より奥に。
+    if (this.gleam) {
+      const gm = this.gleam, gp = 1 - gm.life / gm.max;        // 0..1
+      const R = Math.max(11, this.h * 0.05);
+      const gr = (0.25 + gp * 1.0) * R * 3;                    // 拡がる半径
+      const ga = (1 - gp) * 0.5;                               // だんだん薄く
+      const grd = ctx.createRadialGradient(gm.x, gm.y, 0, gm.x, gm.y, gr);
+      grd.addColorStop(0, `rgba(224,255,255,${ga})`);
+      grd.addColorStop(0.45, `rgba(150,235,255,${ga * 0.5})`);
+      grd.addColorStop(1, 'rgba(150,235,255,0)');
+      ctx.fillStyle = grd; ctx.fillRect(gm.x - gr, gm.y - gr, gr * 2, gr * 2);
+    }
+
     for (const p of this.particles) {
-      ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, p.s, p.s);
+      if (p.kind === 'spark') {                                // 十字に光るきらめき
+        const tw = 0.5 + 0.5 * Math.sin(this.t * 12 + p.tw);
+        ctx.globalAlpha = Math.max(0, p.life) * (0.4 + 0.6 * tw);
+        ctx.fillStyle = p.col;
+        const s = p.s * (0.7 + tw);
+        ctx.fillRect(p.x - s / 2, p.y - s * 0.16, s, s * 0.32);
+        ctx.fillRect(p.x - s * 0.16, p.y - s / 2, s * 0.32, s);
+      } else {
+        ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, p.s, p.s);
+      }
     }
     ctx.globalAlpha = 1;
+
+    if (this.diamond) this._drawDiamond(ctx, this.diamond);
 
     if (this.flash > 0) { ctx.fillStyle = `rgba(200,50,50,${this.flash * 0.16})`; ctx.fillRect(-20, -20, W + 40, H + 40); }
     ctx.restore();
@@ -127,6 +193,66 @@ export class Scene {
     ctx.fillStyle = '#8a5a2c'; ctx.fillRect(0, -u * 0.16, u * 2.6, u * 0.32);     // 柄
     ctx.fillStyle = '#cfcfd6'; ctx.fillRect(u * 2.3, -u * 0.85, u * 0.5, u * 1.7); // 頭
     ctx.fillStyle = '#9aa0aa'; ctx.fillRect(u * 2.2, -u * 0.28, u * 0.8, u * 0.56);
+    ctx.restore();
+  }
+
+  // 掘り出されたダイヤ：カット宝石本体 + 放射光 + 走るきらめき。
+  _drawDiamond(ctx, d) {
+    const R = Math.max(11, this.h * 0.05);
+    const t = d.t;
+    const fade = Math.min(1, d.life / 0.35);                 // 終盤に消える
+    let sc;                                                  // 飛び出しのポップ（オーバーシュート）
+    if (t < 0.15) sc = 1.3 * (t / 0.15);
+    else if (t < 0.30) sc = 1.3 - 0.3 * ((t - 0.15) / 0.15);
+    else sc = 1 + 0.05 * Math.sin((t - 0.30) * 5);
+
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.scale(Math.max(0, sc), Math.max(0, sc));
+
+    // 放射する光のすじ（ゆっくり回りながら点滅。控えめにしてストロボ感を出さない）
+    ctx.save();
+    ctx.rotate(t * 0.5);
+    ctx.globalAlpha = fade * (0.16 + 0.10 * Math.sin(t * 9));
+    ctx.fillStyle = '#d4f8ff';
+    const rays = 8, rlen = R * 2.7;
+    for (let i = 0; i < rays; i++) {
+      ctx.rotate((Math.PI * 2) / rays);
+      ctx.beginPath();
+      ctx.moveTo(-R * 0.12, -R * 0.9); ctx.lineTo(0, -rlen); ctx.lineTo(R * 0.12, -R * 0.9);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+
+    // 宝石本体（八面体のカット宝石。左面=暗・右面=明・上のテーブル面=最も明るい）
+    const top = -R, bot = R * 1.18, mx = R * 0.72, ty = -R * 0.45;
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = '#2f9fc2';                                // 左面（影）
+    ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(-mx, 0); ctx.lineTo(0, bot); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#54d6e8';                                // 右面（光）
+    ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(mx, 0); ctx.lineTo(0, bot); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#bff4ff';                                // 上のテーブル面
+    ctx.beginPath();
+    ctx.moveTo(0, top); ctx.lineTo(-mx * 0.6, ty); ctx.lineTo(0, ty * 0.4); ctx.lineTo(mx * 0.6, ty);
+    ctx.closePath(); ctx.fill();
+    ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(1.5, R * 0.10); ctx.strokeStyle = '#176a86';
+    ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(mx, 0); ctx.lineTo(0, bot); ctx.lineTo(-mx, 0); ctx.closePath(); ctx.stroke();
+
+    // 表面を左右に走るきらめき
+    const sx = Math.sin(t * 4) * R * 0.42;
+    ctx.globalAlpha = fade * (0.5 + 0.4 * Math.sin(t * 8));
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(sx, -R * 0.55); ctx.lineTo(sx + R * 0.16, -R * 0.28); ctx.lineTo(sx, -R * 0.02); ctx.lineTo(sx - R * 0.16, -R * 0.28);
+    ctx.closePath(); ctx.fill();
+
+    // 角で瞬く 4 方向のスター
+    const stw = 0.5 + 0.5 * Math.sin(t * 10);
+    ctx.globalAlpha = fade * stw;
+    const spx = R * 0.5, spy = -R * 0.7, ss = R * 0.5 * (0.6 + stw * 0.6);
+    ctx.fillRect(spx - ss / 2, spy - ss * 0.12, ss, ss * 0.24);
+    ctx.fillRect(spx - ss * 0.12, spy - ss / 2, ss * 0.24, ss);
+
     ctx.restore();
   }
 }
