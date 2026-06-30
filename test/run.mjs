@@ -246,6 +246,67 @@ rejects('ぱん や', 'panya');
   ok(p2.pick(2, () => 0.5, 'あ') === 'あ', 'avoid ignored when single candidate');
 }
 
+// ---- audio: バックグラウンド復帰の自動レジューム（sfx.js） ----
+// 偽の AudioContext / window / document を仕込み、visibilitychange 等で resume() するかを検証。
+{
+  function makeCtx() {
+    let resumeCalls = 0;
+    const c = {
+      state: 'suspended', sampleRate: 44100, currentTime: 0, destination: {},
+      resume() { resumeCalls++; c.state = 'running'; return Promise.resolve(); },
+      suspend() { c.state = 'suspended'; return Promise.resolve(); },
+      createDynamicsCompressor() { return { threshold: {}, ratio: {}, knee: {}, attack: {}, release: {}, connect() {} }; },
+      createGain() { return { gain: {}, connect() {} }; },
+      createBuffer() { return { getChannelData() { return new Float32Array(1); } }; },
+      createBufferSource() { return { buffer: null, connect() {}, start() {}, stop() {} }; },
+      get resumeCalls() { return resumeCalls; },
+    };
+    return c;
+  }
+  function makeTarget(extra) {
+    const h = {};
+    return Object.assign({
+      addEventListener(t, fn) { (h[t] = h[t] || []).push(fn); },
+      dispatch(t) { (h[t] || []).forEach((fn) => fn()); },
+    }, extra);
+  }
+  function setup(mutedFlag) {
+    const c = makeCtx();
+    global.localStorage = { s: { 'kidtype:muted': mutedFlag ? '1' : '0' }, getItem(k) { return this.s[k] ?? null; }, setItem(k, v) { this.s[k] = String(v); } };
+    global.window = makeTarget({ AudioContext: function () { return c; } });
+    global.document = makeTarget({ visibilityState: 'visible' });
+    return c;
+  }
+
+  // (1) 非ミュート：復帰イベントで suspended → running へ resume する（3 経路とも）。
+  {
+    const c = setup(false);
+    const sfx = (await import('../src/audio/sfx.js?case=on')).default;
+    sfx.unlock();                 // ctx 生成＋リスナ登録
+    c.state = 'suspended';        // OS のバックグラウンド suspend を模擬
+    const before = c.resumeCalls;
+    global.document.dispatch('visibilitychange');
+    ok(c.resumeCalls === before + 1 && c.state === 'running', 'visibilitychange resumes when not muted');
+    c.state = 'suspended'; global.window.dispatch('pageshow');
+    ok(c.state === 'running', 'pageshow resumes when not muted');
+    c.state = 'suspended'; global.window.dispatch('focus');
+    ok(c.state === 'running', 'focus resumes when not muted');
+  }
+  // (2) ミュート中：復帰イベントが来ても絶対に resume しない（mute=suspend を尊重）。
+  {
+    const c = setup(true);
+    const sfx = (await import('../src/audio/sfx.js?case=muted')).default;
+    sfx.unlock();                 // muted なので resume されない
+    c.state = 'suspended';
+    const before = c.resumeCalls;
+    global.document.dispatch('visibilitychange');
+    global.window.dispatch('pageshow');
+    global.window.dispatch('focus');
+    ok(c.resumeCalls === before && c.state === 'suspended', 'muted: visibility/pageshow/focus never resume');
+  }
+  delete global.window; delete global.document; delete global.localStorage;
+}
+
 // ---- 結果 ----
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) { console.log('\nFAILURES:'); for (const f of fails) console.log('  ✗ ' + f); process.exit(1); }

@@ -7,7 +7,28 @@
 let ctx = null;
 let master = null;
 let muted = false;
+let resumeWired = false;
 try { muted = localStorage.getItem('kidtype:muted') === '1'; } catch (_) {}
+
+// バックグラウンド復帰時の自動レジューム。
+//  - iOS PWA はアプリ切替/ホームで OS が AudioContext を suspend し、復帰しても suspended のまま放置する → 音が止まる。
+//  - そこで前面に戻ったら（ミュートでなければ）resume して音を復活させる。
+//  - ミュート中は絶対に resume しない（ミュートは suspend で実現しているため、ユーザーの選択を尊重）。
+function resumeAudio() {
+  if (ctx && ctx.state === 'suspended' && !muted) ctx.resume();
+}
+// リスナは一度だけ登録（冪等）。visibilitychange / pageshow / focus は iOS で発火が不揃いなので 3 つとも拾う。
+function wireResume() {
+  if (resumeWired || typeof window === 'undefined') return;
+  resumeWired = true;
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') resumeAudio();
+    });
+  }
+  window.addEventListener('pageshow', resumeAudio);
+  window.addEventListener('focus', resumeAudio);
+}
 
 function ensure() {
   if (ctx) return ctx;
@@ -19,6 +40,7 @@ function ensure() {
   master = ctx.createGain();
   master.gain.value = 0.9;
   master.connect(comp); comp.connect(ctx.destination);
+  wireResume(); // 復帰時の自動レジュームを一度だけ仕込む
   return ctx;
 }
 
