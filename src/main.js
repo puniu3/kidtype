@@ -157,7 +157,7 @@ function onKeyDown(e) {
   // play
   if (k === 'Escape') { screen = 'title'; return; }
   let ch = null;
-  if (k.length === 1) { const lc = k.toLowerCase(); if (/[a-z0-9-]/.test(lc)) ch = lc; else if (k === ' ') ch = ' '; }
+  if (k.length === 1) { const lc = k.toLowerCase(); if (/[a-z0-9-]/.test(lc)) ch = lc; } // スペースは打鍵キーにしない（語間スペース廃止）
   if (ch == null) return;
   handleType(ch);
 }

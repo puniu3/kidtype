@@ -32,7 +32,7 @@ export class Keyboard {
     this.area = { x, y, w, h };
     const cols = 11.5;          // 一番長い行＋余白
     const gap = 0.08;           // キー間（unit比）
-    const rowsN = ROWS.length + 1; // +1 = space 行
+    const rowsN = ROWS.length;  // 文字3行のみ（スペースバーは廃止：日本語に語間スペースは不要）
     // 幅基準と高さ基準の小さい方で unit を決める
     const uW = w / (cols * (1 + gap));
     const uH = h / (rowsN * (1 + gap));
@@ -50,9 +50,6 @@ export class Keyboard {
       for (const k of row.keys) { this.rects.set(k, { x: cx, y: cy, w: u, h: u }); cx += u + g; }
       cy += u + g;
     }
-    // スペースバー
-    const spW = u * 6 + g * 5;
-    this.rects.set(' ', { x: x + (w - spW) / 2, y: cy, w: spW, h: u });
   }
 
   keyRect(ch) { return this.rects.get(ch); }
@@ -84,7 +81,7 @@ export class Keyboard {
       ctx.fillStyle = glow > 0 ? '#2a2a2a' : 'rgba(255,255,255,0.85)';
       ctx.font = `700 ${Math.round(r.h * 0.42)}px ui-rounded, "Hiragino Maru Gothic ProN", system-ui, sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      const lbl = label === ' ' ? '␣' : label.toUpperCase();
+      const lbl = label.toUpperCase();
       ctx.fillText(lbl, r.x + r.w / 2, y + (r.h - d) / 2 + 1);
     }
   }

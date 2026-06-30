@@ -5,7 +5,7 @@
 //                Stage2 のかな入力にすぐ繋がるよう実用順に並べる。
 //  - KANA_ORDER: Stage2 で導入するかな（清音→濁音→拗音）。
 //  - WORDS     : Stage3 の単語。kana=表示, e=絵文字アイコン, lv=難易度。
-//  - SENTENCES : Stage4 の短い文。語の区切りは半角スペース（打鍵は自動スキップ）。
+//  - SENTENCES : Stage4 の短い文。日本語なので語の区切り(スペース)は無し。そのまま続けて打つ。
 
 // Stage1: 単キー導入順（実用＝早くかなを打てる順）
 export const KEY_ORDER = [
@@ -78,18 +78,18 @@ export const WORDS = [
   { kana: 'こうせき', e: '⛏️', lv: 4 },
 ];
 
-// Stage4: 短文（区切りは半角スペース）
+// Stage4: 短文（日本語なので区切りスペースは無し＝続けて打つ）
 export const SENTENCES = [
-  { text: 'ブロックを ほる', lv: 1 },
-  { text: 'いしを とる', lv: 1 },
-  { text: 'きを きる', lv: 1 },
-  { text: 'たいまつを おく', lv: 2 },
-  { text: 'つるはしを つくる', lv: 2 },
-  { text: 'よるは ゾンビが くる', lv: 3 },
-  { text: 'ダイヤを みつけた', lv: 3 },
-  { text: 'いえを つくろう', lv: 3 },
-  { text: 'ようがんに きをつけて', lv: 4 },
-  { text: 'クリーパーが ばくはつした', lv: 4 },
+  { text: 'ブロックをほる', lv: 1 },
+  { text: 'いしをとる', lv: 1 },
+  { text: 'きをきる', lv: 1 },
+  { text: 'たいまつをおく', lv: 2 },
+  { text: 'つるはしをつくる', lv: 2 },
+  { text: 'よるはゾンビがくる', lv: 3 },
+  { text: 'ダイヤをみつけた', lv: 3 },
+  { text: 'いえをつくろう', lv: 3 },
+  { text: 'ようがんにきをつけて', lv: 4 },
+  { text: 'クリーパーがばくはつした', lv: 4 },
 ];
 
 // 段階 → 順序付き id プール（progress.introduce/pick が使う）。
