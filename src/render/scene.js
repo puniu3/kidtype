@@ -144,7 +144,7 @@ export class Scene {
       ctx.fillRect(x + ((y / 28) % 2) * 18, y, 6, 6);
 
     // 育つ家（村）— 丘の上の区画に、累計スコアの tier に応じた家を建てる。
-    this._drawHouse(ctx);
+    this._drawHouse(ctx, groundY);
 
     this._drawCharacter(ctx, groundY);
 
@@ -190,7 +190,7 @@ export class Scene {
   //   10 おしろ / 11 おおきな おしろ
   // ステージ選択カードは画面下寄り、タイトルは上端。建物は丘の帯（中ほど）に収め、
   // 集落は横（左右）へ広げてカードと衝突させない。
-  _drawHouse(ctx) {
+  _drawHouse(ctx, groundY) {
     const W = this.w, H = this.h;
     const N = HOUSE_MILESTONES.length;
     const tier = Math.max(0, Math.min(N - 1, this.houseTier | 0));
@@ -198,6 +198,10 @@ export class Scene {
     const cx = W * 0.5;                                    // 区画の中心 x
     const baseY = H * 0.645;                               // 区画の地面ライン（丘の上）
     const span = Math.min(W * 0.92, u * (5 + tier * 1.7)); // 区画幅：tier で横に広がる（端で頭打ち）
+    // 区画は本来の地面より高い「丘の帯」に置く（カード・タイトルを避けるため）。
+    // そのままだと土台が宙に浮くので、地面(groundY)から区画(baseY)まで草の丘を盛って
+    // つなぎ、区画が「丘の平らな頂上」に建っているように地面と馴染ませる。
+    this._mound(ctx, cx, baseY, groundY ?? H * 0.74, span, u);
     this._plot(ctx, cx, baseY, span, u);
     switch (tier) {
       case 0:  this._tier0(ctx, cx, baseY, u); break;
@@ -231,6 +235,43 @@ export class Scene {
     ctx.fillStyle = 'rgba(0,0,0,0.10)';
     for (let x = left + u * 0.4; x < left + w - u * 0.2; x += u * 0.9)
       ctx.fillRect(Math.round(x), Math.round(baseY + grassH + u * 0.3), Math.max(2, u * 0.16), Math.max(2, u * 0.16));
+  }
+
+  // 区画を地面につなぐ「草の丘（土手）」。区画の地面ライン(topY)から本来の地面(groundY)まで
+  // ブロックを積み、下へ行くほど横へ広がる丘の輪郭を作る。露出した段差(棚)には草を載せて
+  // 草の生えた斜面に見せる。これで区画は宙に浮かず、丘の平らな頂上に建っているように
+  // 地面と馴染む。全 tier 共通（更地〜大城まで topW=span を受けて幅が追従する）。
+  _mound(ctx, cx, topY, groundY, topW, u) {
+    const rise = groundY - topY;
+    if (rise <= u * 0.2) return;
+    const rows = Math.max(5, Math.round(rise / (u * 0.34)));
+    const rowH = rise / rows;
+    // 下端の幅：区画より広げて「丘の裾野」を作る（端で頭打ち。広 span はほぼ全幅の大地に）。
+    const bottomW = Math.min(this.w * 1.18, topW + Math.max(u * 4.5, u * 8));
+    const grass = '#5fa83a', grassHi = '#74c34a', dirt = '#7a5230';
+    let prevW = topW;
+    for (let i = 0; i < rows; i++) {
+      const f = (i + 1) / rows;                                  // 0(上)→1(下)
+      const w = topW + (bottomW - topW) * Math.pow(f, 1.5);      // 下ほど広がる丘の輪郭
+      const y = topY + i * rowH;
+      this._blk(ctx, cx - w / 2, y, w, rowH + 1, dirt);          // 土の本体
+      const ledge = (w - prevW) / 2;                             // 上の段からはみ出た棚（左右）
+      if (ledge > 1.2) {
+        const gh = Math.min(rowH + 1, u * 0.42);
+        this._blk(ctx, cx - w / 2, y, ledge + 1, gh, grass);            // 左の棚に草
+        this._blk(ctx, cx + prevW / 2, y, ledge + 1, gh, grass);       // 右の棚に草
+        this._blk(ctx, cx - w / 2, y, ledge + 1, 2, grassHi);          // 草のハイライト
+        this._blk(ctx, cx + prevW / 2, y, ledge + 1, 2, grassHi);
+      }
+      prevW = w;
+    }
+    // 土の斑点（本来の地面と同じテクスチャで馴染ませる）。露出した土の斜面だけに散らす。
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    for (let y = topY + rise * 0.35; y < groundY - u * 0.2; y += u * 0.66) {
+      const f = (y - topY) / rise, ww = topW + (bottomW - topW) * Math.pow(f, 1.5);
+      for (let x = cx - ww / 2 + u * 0.5; x < cx + ww / 2 - u * 0.4; x += u * 1.05)
+        ctx.fillRect(Math.round(x + ((y / 22) % 2) * 10), Math.round(y), Math.max(2, u * 0.13), Math.max(2, u * 0.13));
+    }
   }
 
   // 板/壁の継ぎ目とライティング（立体感）。
