@@ -10,6 +10,7 @@ import { pickRoundIds } from './engine/round.js';
 import { Scene } from './render/scene.js';
 import { Keyboard } from './render/keyboard.js';
 import sfx from './audio/sfx.js';
+import { initInstall } from './install.js';
 
 const FONT = 'ui-rounded, "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif';
 const STAGE_NAME = { 1: 'キー', 2: 'ローマじ', 3: 'たんご', 4: 'ぶんしょう' };
@@ -455,3 +456,6 @@ requestAnimationFrame(frame);
 if ('serviceWorker' in navigator && window.isSecureContext) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
+
+// ?install のときだけ「ホームに ついか」導線を出す（紙のチラシ install.html の QR からの 1手順導線）。
+initInstall();

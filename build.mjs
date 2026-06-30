@@ -16,7 +16,7 @@ for (let i = 0; i < a.length; i++) {
 if (!outDir) { console.error('usage: build.mjs --outDir <dir>'); process.exit(2); }
 
 // 配信に必要なファイル/ディレクトリ。.butler / review / test / node_modules 等は含めない。
-const ITEMS = ['index.html', 'manifest.webmanifest', 'sw.js', 'css', 'src', 'assets'];
+const ITEMS = ['index.html', 'install.html', 'manifest.webmanifest', 'sw.js', 'css', 'src', 'assets'];
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 for (const item of ITEMS) {
