@@ -5,6 +5,7 @@
 import { matcherFor } from './engine/matcher.js';
 import { toChunks } from './engine/romaji.js';
 import { POOLS, wordById, sentenceById } from './engine/content.js';
+import { scoreRound } from './engine/score.js';
 import { Scene } from './render/scene.js';
 import { Keyboard } from './render/keyboard.js';
 import sfx from './audio/sfx.js';
@@ -101,14 +102,8 @@ function nextRoundItem() { current = buildItem(round.stage, round.queue[round.in
 
 function finishRound() {
   const timeMs = performance.now() - round.startMs;
-  const total = round.keysOk + round.keysErr;
-  const accuracy = total ? round.keysOk / total : 1;
-  const avgPerKey = timeMs / Math.max(1, round.keysOk);
-  const speedBonus = Math.max(0, Math.round((1600 - avgPerKey) * round.keysOk / 100));
-  const score = Math.round(round.keysOk * (5 + accuracy * 5) + speedBonus);
-  let stars = 1;
-  if (accuracy >= 0.80) stars = 2;
-  if (accuracy >= 0.95 && avgPerKey <= 1400) stars = 3;
+  // 得点・★・正確率は純粋関数 score.js に委譲（正確 かつ 速いほど高得点・ミスは寄与しない）。
+  const { score, stars, accuracy } = scoreRound({ keysOk: round.keysOk, keysErr: round.keysErr, timeMs });
   const isNewBest = saveBest(round.stage, score, stars);
   result = { stage: round.stage, timeMs, accuracy, score, stars, isNewBest, best: loadBest(round.stage) };
   screen = 'result';
