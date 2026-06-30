@@ -454,12 +454,29 @@ rejects('ぱん や', 'panya');
   }
 }
 
-// ---- milestones.js: 長期プログレス（累計スコア→家 tier）----
+// ---- milestones.js: 長期プログレス（累計スコア→すまい tier）----
 // 純関数 houseLevelForTotal / 配列 HOUSE_MILESTONES の不変条件を検証する。
+// 拡充: 6 段 → 12 段（更地 → 集落 → 大きなお城）。tier 0 は更地、最上位は grand castle。
 {
   const { houseLevelForTotal, HOUSE_MILESTONES, houseName } = await import('../src/engine/milestones.js');
 
-  // (1) しきい値は厳密昇順。先頭は total=0（更地が tier 0）。
+  // 拡充後の tier テーブル（しきい値 / 名前）。回帰防止のためテーブルそのものを明示固定。
+  const EXPECTED = [
+    [0, 'さらち'], [500, 'たきび'], [1200, 'こや'], [2500, 'ちいさな いえ'],
+    [4500, 'はたけつき いえ'], [7500, 'いえと なや'], [12000, 'おおきな いえ'],
+    [18000, 'やしき'], [28000, 'むら'], [45000, 'とりで'], [75000, 'おしろ'],
+    [130000, 'おおきな おしろ'],
+  ];
+
+  // (0) tier 数が拡充後の段数（12）に一致し、各 (しきい値・名前) が期待どおり。
+  eq(HOUSE_MILESTONES.length, EXPECTED.length, 'tier count matches expanded table (12 tiers)');
+  eq(HOUSE_MILESTONES.length, 12, 'tier count is 12 (more tiers + higher ceiling)');
+  for (let i = 0; i < EXPECTED.length; i++) {
+    eq(HOUSE_MILESTONES[i].total, EXPECTED[i][0], `tier ${i} threshold == ${EXPECTED[i][0]}`);
+    eq(HOUSE_MILESTONES[i].name, EXPECTED[i][1], `tier ${i} name == ${EXPECTED[i][1]}`);
+  }
+
+  // (1) しきい値は厳密昇順。先頭は total=0（更地が tier 0）。天井は 25000 より遥かに高い。
   eq(HOUSE_MILESTONES[0].total, 0, 'first milestone threshold is 0 (empty lot)');
   {
     let asc = true;
@@ -468,15 +485,21 @@ rejects('ぱん や', 'panya');
     ok(asc, 'milestone thresholds are strictly ascending');
   }
   ok(HOUSE_MILESTONES.every((m) => typeof m.name === 'string' && m.name.length > 0), 'every tier has a name');
+  ok(HOUSE_MILESTONES[HOUSE_MILESTONES.length - 1].total >= 100000, 'top threshold raised well past old 25000 ceiling');
 
-  // (2) total=0 は tier 0。
+  // (2) total=0 は tier 0。序盤は刻みが低く、すぐ次の段へ届く（最初の段は 500 以下）。
   eq(houseLevelForTotal(0), 0, 'total 0 → tier 0');
+  ok(HOUSE_MILESTONES[1].total <= 800, 'first reward tier is reachable quickly (<= 800)');
 
   // (3) 各しきい値ちょうどでその tier に乗る／直前(-1)では一つ下に留まる。
   for (let i = 0; i < HOUSE_MILESTONES.length; i++) {
     eq(houseLevelForTotal(HOUSE_MILESTONES[i].total), i, `total == threshold[${i}] → tier ${i}`);
     if (i > 0) eq(houseLevelForTotal(HOUSE_MILESTONES[i].total - 1), i - 1, `total just below threshold[${i}] → tier ${i - 1}`);
   }
+  // 代表点のスポット確認（しきい値表の取り違え検出）。
+  eq(houseLevelForTotal(500), 1, 'total 500 → tier 1 (たきび)');
+  eq(houseLevelForTotal(7500), 5, 'total 7500 → tier 5 (いえと なや)');
+  eq(houseLevelForTotal(130000), 11, 'total 130000 → tier 11 (おおきな おしろ)');
 
   // (4) tier は total に対して単調非減少（途中の刻みでも下がらない）。
   {
@@ -489,10 +512,12 @@ rejects('ぱん や', 'panya');
     ok(mono, 'houseLevelForTotal is monotonically non-decreasing in total');
   }
 
-  // (5) 最上位しきい値以上は必ず最上位 tier（城）に乗り、超過しても飛び出さない。
+  // (5) 最上位しきい値以上は必ず最上位 tier（おおきな おしろ＝grand castle）に乗り、超過しても飛び出さない。
   const top = HOUSE_MILESTONES.length - 1;
-  eq(houseLevelForTotal(HOUSE_MILESTONES[top].total), top, 'max threshold → top tier (城)');
+  eq(top, 11, 'top tier index is 11');
+  eq(houseLevelForTotal(HOUSE_MILESTONES[top].total), top, 'max threshold → top tier (grand castle)');
   eq(houseLevelForTotal(HOUSE_MILESTONES[top].total * 10), top, 'far beyond max stays at top tier (no overflow)');
+  eq(houseName(HOUSE_MILESTONES[top].total), 'おおきな おしろ', 'houseName at max returns grand castle name');
   eq(houseName(HOUSE_MILESTONES[top].total), HOUSE_MILESTONES[top].name, 'houseName returns top tier name at max');
 
   // (6) 異常入力(負値・非数)は tier 0 に丸める。
