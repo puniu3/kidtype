@@ -227,3 +227,12 @@ export const POOLS = {
 
 export function wordById(id) { return WORDS[Number(String(id).slice(1))]; }
 export function sentenceById(id) { return SENTENCES[Number(String(id).slice(1))]; }
+
+// id（'w12' / 's3'）→ lv（1..4）。Stage3/4 のラウンド難易度ミックスに使う。
+// 'w' は WORDS、's' は SENTENCES を引く。lv を持たない id は null。
+export function lvOfId(id) {
+  const s = String(id);
+  if (s[0] === 'w') return WORDS[Number(s.slice(1))]?.lv ?? null;
+  if (s[0] === 's') return SENTENCES[Number(s.slice(1))]?.lv ?? null;
+  return null;
+}
