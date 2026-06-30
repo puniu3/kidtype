@@ -3,7 +3,8 @@ import { toChunks, canonicalRomaji, kanaToRomaji } from '../src/engine/romaji.js
 import { Matcher, matcherFor } from '../src/engine/matcher.js';
 import { Progress, Stage } from '../src/engine/progress.js';
 import { kataToHira } from '../src/engine/kana.js';
-import { WORDS, SENTENCES } from '../src/engine/content.js';
+import { WORDS, SENTENCES, POOLS, lvOfId } from '../src/engine/content.js';
+import { pickRoundIds } from '../src/engine/round.js';
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -55,6 +56,68 @@ function rejects(target, seq) {
   eq(wset.size, WORDS.length, 'WORDS kana are all unique (no duplicates)');
   const sset = new Set(SENTENCES.map((s) => s.text));
   eq(sset.size, SENTENCES.length, 'SENTENCES text are all unique (no duplicates)');
+}
+
+// ============ ラウンド出題サンプラ（round.js pickRoundIds）の検証 ============
+// buildRound が「プール前方 N*2 件」だけ抽選していた回帰の防止。
+//   1) 到達性: seed 付き多数ドローで、各ステージのプール全 id が最低 1 回出る
+//      （特に stage3 の w0..w109 / stage4 の s0..s41 = 拡充した新語が出ること）。
+//   2) 各ラウンドは count 件すべて distinct で、プールの正規メンバーであること。
+//   3) 難易度: lv 付き stage3/4 は 1 ラウンドが全 lv4 にならず、易しい lv1 を必ず含む。
+{
+  const ROUND_COUNT = { 1: 16, 2: 14, 3: 8, 4: 5 };
+  // 決定的な seed 付き rng（LCG）。テスト再現性のため Math.random は使わない。
+  const makeRng = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; };
+
+  for (const stage of [1, 2, 3, 4]) {
+    const pool = POOLS[stage];
+    const count = ROUND_COUNT[stage];
+    const lvOf = (stage === 3 || stage === 4) ? lvOfId : null;
+    const poolSet = new Set(pool);
+    const rng = makeRng(0x9e37 + stage);
+    const seen = new Set();
+    const rounds = 4000;
+    let distinctOk = true, memberOk = true;
+    let allLv4 = 0, missingLv1 = 0;
+
+    for (let k = 0; k < rounds; k++) {
+      const ids = pickRoundIds(stage, { pool, lvOf, count, rng });
+      // distinct & count
+      if (ids.length !== count || new Set(ids).size !== count) distinctOk = false;
+      // 全 id がプール所属
+      for (const id of ids) { if (!poolSet.has(id)) memberOk = false; seen.add(id); }
+      // 難易度スプレッド（lv 付きのみ）
+      if (lvOf) {
+        const lvs = ids.map(lvOf);
+        if (lvs.every((lv) => lv === 4)) allLv4++;        // 全 lv4 = 鬼畜（あってはならない）
+        if (!lvs.some((lv) => lv === 1)) missingLv1++;    // やさしい lv1 が無いラウンド
+      }
+    }
+
+    ok(distinctOk, `pickRoundIds stage${stage}: every round has ${count} distinct ids`);
+    ok(memberOk, `pickRoundIds stage${stage}: all picked ids belong to the pool`);
+    // 到達性: プール全 id が出る（前方スライス回帰なら新語が漏れて FAIL）。
+    eq(seen.size, poolSet.size,
+      `pickRoundIds stage${stage}: REACHABILITY — all ${poolSet.size} pool ids appear over ${rounds} draws`);
+    if (lvOf) {
+      eq(allLv4, 0, `pickRoundIds stage${stage}: no round is entirely lv4 (difficulty spread)`);
+      eq(missingLv1, 0, `pickRoundIds stage${stage}: every round includes at least one easy lv1 item`);
+    }
+  }
+
+  // 旧バグの明示的回帰: 拡充で増えた末尾 id（w109 / s41）が必ず到達できること。
+  {
+    const rng = makeRng(424242);
+    const seenW = new Set(), seenS = new Set();
+    for (let k = 0; k < 4000; k++) {
+      for (const id of pickRoundIds(3, { pool: POOLS[3], lvOf: lvOfId, count: 8, rng })) seenW.add(id);
+      for (const id of pickRoundIds(4, { pool: POOLS[4], lvOf: lvOfId, count: 5, rng })) seenS.add(id);
+    }
+    ok(seenW.has('w109') && seenW.has('w74') && seenW.has('w50'),
+      'pickRoundIds: newly-added WORD ids (w50/w74/w109) are reachable');
+    ok(seenS.has('s41') && seenS.has('s20') && seenS.has('s10'),
+      'pickRoundIds: newly-added SENTENCE ids (s10/s20/s41) are reachable');
+  }
 }
 
 // ---- kana.js ----

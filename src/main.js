@@ -4,8 +4,9 @@
 
 import { matcherFor } from './engine/matcher.js';
 import { toChunks } from './engine/romaji.js';
-import { POOLS, wordById, sentenceById } from './engine/content.js';
+import { POOLS, wordById, sentenceById, lvOfId } from './engine/content.js';
 import { scoreRound } from './engine/score.js';
+import { pickRoundIds } from './engine/round.js';
 import { Scene } from './render/scene.js';
 import { Keyboard } from './render/keyboard.js';
 import sfx from './audio/sfx.js';
@@ -70,14 +71,14 @@ function resize() {
 window.addEventListener('resize', resize);
 
 // ---------- ラウンド構築 ----------
-function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
-
+// プール「全体」から毎ラウンド出題する（拡充コーパスの新語も実プレイに出るように）。
+// 抽選ロジックは純粋関数 pickRoundIds（src/engine/round.js）に切り出してテスト可能に。
+// lv 付きステージ（3/4）は易しめ寄りの難易度ミックスで選ぶ（lvOfId を渡す）。
 function buildRound(stage) {
   const pool = POOLS[stage];
-  const N = ROUND_COUNT[stage];
-  const cap = Math.min(pool.length, N * 2);     // 易しめ寄り（順序プールの前方から）に絞ってから抽選
-  const cand = shuffle(pool.slice(0, cap));
-  return cand.slice(0, Math.min(N, cand.length));
+  const count = ROUND_COUNT[stage];
+  const lvOf = (stage === 3 || stage === 4) ? lvOfId : null;
+  return pickRoundIds(stage, { pool, lvOf, count, rng: Math.random });
 }
 
 function buildItem(stage, id) {
