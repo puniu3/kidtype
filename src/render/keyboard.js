@@ -1,6 +1,8 @@
 // keyboard.js — 画面上のブロック風 US キーボード。次に押すキーを光らせる「地図」。
 // 指のゾーンをほんのり色分けして、正しい指の習慣づけも促す。
 
+import { FONT } from '../font.js';
+
 const ROWS = [
   { off: 0.0, keys: ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '-'] },
   { off: 0.3, keys: ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'] },
@@ -79,7 +81,7 @@ export class Keyboard {
     // ラベル
     if (label) {
       ctx.fillStyle = glow > 0 ? '#2a2a2a' : 'rgba(255,255,255,0.85)';
-      ctx.font = `700 ${Math.round(r.h * 0.42)}px ui-rounded, "Hiragino Maru Gothic ProN", system-ui, sans-serif`;
+      ctx.font = `700 ${Math.round(r.h * 0.42)}px ${FONT}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const lbl = label.toUpperCase();
       ctx.fillText(lbl, r.x + r.w / 2, y + (r.h - d) / 2 + 1);

@@ -13,8 +13,7 @@ import { HouseBar } from './render/housebar.js';
 import { drawTarget } from './render/target.js';
 import sfx from './audio/sfx.js';
 import { initInstall } from './install.js';
-
-const FONT = 'ui-rounded, "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif';
+import { FONT, loadGameFont } from './font.js';
 const STAGE_NAME = { 1: 'キー', 2: 'ローマじ', 3: 'たんご', 4: 'ぶんしょう', 5: 'ながいぶん' };
 const STAGE_ICON = { 1: '🟨', 2: '🟩', 3: '🟦', 4: '🟪', 5: '🟥' };
 // 集中力が続く程度の1ラウンド課題数（調整しやすいよう一箇所に）
@@ -425,7 +424,10 @@ function frame(t) {
 }
 
 resize();
-requestAnimationFrame(frame);
+// 埋め込みフォント（src/font.js）の読み込みを待ってから描き始める
+// → 起動時に一瞬システムフォントで描かれる「フォールバックのちらつき」を出さない。
+// 失敗/タイムアウト時は false で resolve してシステムフォントのまま開始する。
+loadGameFont().then(() => requestAnimationFrame(frame));
 
 if ('serviceWorker' in navigator && window.isSecureContext) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});

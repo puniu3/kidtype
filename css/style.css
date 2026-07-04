@@ -16,7 +16,8 @@ html, body {
   -webkit-touch-callout: none;
   /* iOS のタップ時グレーフラッシュを消す（押下フィードバックは自前で出す） */
   -webkit-tap-highlight-color: transparent;
-  font-family: ui-rounded, "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif;
+  /* 先頭は埋め込みフォント（src/font.js が FontFace API で登録する）。未ロード時は後続へ。 */
+  font-family: "KidType Maru", ui-rounded, "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif;
 }
 
 #game {

@@ -9,8 +9,7 @@
 import { toChunks } from '../engine/romaji.js';
 import { POOLS, wordById, sentenceById, longSentenceById } from '../engine/content.js';
 import { TILE_GAP, SPACE_GAP, lineUnits, layoutRanges, poolMaxUnits } from '../engine/tilelayout.js';
-
-const FONT = 'ui-rounded, "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif';
+import { FONT } from '../font.js';
 
 // ステージ → 許容行数。たんご(3) は 1 行のまま、ぶんしょう(4)・ながいぶん(5) は 2 行まで。
 export const STAGE_MAX_LINES = { 3: 1, 4: 2, 5: 2 };
