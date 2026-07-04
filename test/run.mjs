@@ -624,6 +624,97 @@ rejects('ぱん や', 'panya');
   ok(houseProgress(NaN).tier === 0 && houseProgress(NaN).frac === 0, 'NaN total → tier0 frac0');
 }
 
+// ---- milestones.js: hardCapTotal（1ラウンドあたりの家プログレス・ハードキャップ）----
+// 仕様: 1ラウンドで進む家は「今の tier T → T+1 まで、バーは T+2 のしきい値直前で頭打ち」。
+// 天井を超えた分は恒久破棄（貯めない・後で戻さない＝carry-over 禁止）。
+{
+  const { hardCapTotal, houseLevelForTotal, houseProgress, HOUSE_MILESTONES } = await import('../src/engine/milestones.js');
+  const top = HOUSE_MILESTONES.length - 1;
+
+  // (1) 報告されたバグ: 0 から「ながいぶん」~2200点 は 500(たきび) と 1200(こや) を一度に跨ぐ。
+  //     ハードキャップ後は 1199 に頭打ち → tier 1(たきび) で止まり、こや(1200) には届かない。
+  {
+    const after = hardCapTotal(0, 2200);
+    eq(after, 1199, 'hardCapTotal(0,2200) caps to 1199 (just below こや=1200)');
+    eq(houseLevelForTotal(after), 1, 'capped 0+2200 → tier 1 (たきび), NOT tier 2');
+    ok(houseLevelForTotal(after) !== 2, 'capped round does not reach tier 2 (こや)');
+    ok(after < HOUSE_MILESTONES[2].total, 'capped after (1199) is strictly below こや threshold (1200)');
+  }
+
+  // (2) 溢れは捨てられる: before+gain(=2200) は保存されない。返り値 < 2200 で、生の合計とは一致しない
+  //     （＝「後で放出する banking」ではなく破棄。捨てた分 = 2200-1199 = 1001）。
+  {
+    const before = 0, gain = 2200;
+    const after = hardCapTotal(before, gain);
+    ok(after < gain, 'overflow discarded → after (1199) strictly less than raw sum (2200)');
+    ok(after !== before + gain, 'after is NOT before+gain → the surplus is not preserved (no banking)');
+    eq((before + gain) - after, 1001, 'discarded overflow is exactly 1001 points (thrown away, never recovered)');
+  }
+
+  // (3) 小さな tier 内ラウンドはキャップされない（今日の挙動と同一）。
+  eq(hardCapTotal(600, 100), 700, 'hardCapTotal(600,100)==700 (no cap, stays tier 1)');
+  eq(houseLevelForTotal(hardCapTotal(600, 100)), 1, 'small in-tier round stays tier 1 (たきび)');
+
+  // (4) 天井の形: マックスまで盛ったラウンド後、バーは T+2 のしきい値直前（tier==T+1・frac≈1・remain 小）。
+  {
+    const after = hardCapTotal(0, 999999);          // 0(T=0) から超過巨大得点
+    eq(after, HOUSE_MILESTONES[2].total - 1, 'maxed round from tier0 pins at こや-1 (T+2 ceiling)');
+    const p = houseProgress(after);
+    eq(p.tier, 1, 'maxed round → bar sits in tier T+1 (=1)');
+    eq(p.remain, 1, 'maxed round → remain 1 (just below the next-next milestone)');
+    ok(p.frac > 0.99 && p.frac <= 1, `maxed round → frac near 1 (got ${p.frac})`);
+  }
+
+  // (5) 天井なし（最上位付近に T+2 が無い）ラウンドはキャップされず before+gain をそのまま返す・クラッシュしない。
+  {
+    // T = top-1 (=10): T+2 = 12 は配列外 → ceiling Infinity。
+    const before10 = HOUSE_MILESTONES[top - 1].total;    // tier 10
+    eq(hardCapTotal(before10, 500000), before10 + 500000, 'no T+2 (tier10) → uncapped before+gain');
+    // T = top (=11): 同様に頭打ちなし。
+    const beforeTop = HOUSE_MILESTONES[top].total;        // tier 11 (最上位)
+    eq(hardCapTotal(beforeTop, 12345), beforeTop + 12345, 'top tier → uncapped before+gain, no crash');
+    ok(Number.isFinite(hardCapTotal(beforeTop, 12345)), 'top-tier result is a finite number');
+  }
+
+  // (6) 異常入力（NaN/負値）は 0 に丸める。
+  eq(hardCapTotal(NaN, 100), 100, 'NaN before → treated as 0, returns gain');
+  eq(hardCapTotal(-500, 100), 100, 'negative before → treated as 0, returns gain');
+  eq(hardCapTotal(300, NaN), 300, 'NaN gain → treated as 0, returns before');
+  eq(hardCapTotal(300, -50), 300, 'negative gain → treated as 0, returns before');
+  eq(hardCapTotal(NaN, NaN), 0, 'both NaN → 0');
+
+  // (7) 逐次適用ファズ: 10k 本のランダム正得点を「毎回キャップ結果を保存」して積む。
+  //     不変条件 ── ①1ラウンドで家 tier は最大 +1 ②after は単調非減少 ③T+2 が在れば after < threshold[T+2]。
+  //     さらに「捨てた分は決して戻らない」= 積んだキャップ後 total は、キャップ無しの素の累計より必ず ≤。
+  {
+    let cur = 0;
+    let rawSum = 0;                 // キャップしなかった場合の素の累計（=banking なら到達したはずの値）
+    let maxTierDelta = 0;           // 観測した1ラウンド最大 tier 上げ幅
+    let monoOk = true, ceilOk = true, everCapped = false;
+    let seed = 0x9e3779b9;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 0x100000000; };
+    for (let i = 0; i < 10000; i++) {
+      const gain = 1 + Math.floor(rnd() * 3000);      // 1..3000（1ラウンドで2段跨ぎうる幅）
+      const tierBefore = houseLevelForTotal(cur);
+      const after = hardCapTotal(cur, gain);
+      const tierAfter = houseLevelForTotal(after);
+      const delta = tierAfter - tierBefore;
+      if (delta > maxTierDelta) maxTierDelta = delta;
+      if (after < cur) monoOk = false;                // 単調非減少
+      if (after < cur + gain) everCapped = true;       // どこかで実際にキャップが効いたか
+      if (tierBefore + 2 < HOUSE_MILESTONES.length && !(after < HOUSE_MILESTONES[tierBefore + 2].total)) ceilOk = false;
+      rawSum += gain;
+      cur = after;
+    }
+    ok(maxTierDelta <= 1, `fuzz: house advances at most +1 tier per round (max observed delta ${maxTierDelta})`);
+    ok(monoOk, 'fuzz: capped total is monotonically non-decreasing across rounds');
+    ok(ceilOk, 'fuzz: after always below the T+2 milestone when it exists (never double-crosses)');
+    ok(everCapped, 'fuzz: cap actually bit on some rounds (test is meaningful)');
+    ok(cur <= rawSum, 'fuzz: capped running total <= raw uncapped sum (discarded overflow never comes back)');
+    ok(cur < rawSum, 'fuzz: capped total strictly less than raw sum (overflow was truly thrown away, not banked)');
+  }
+}
+
 // ---- housebar.js: 注ぎ込み演出のロジック（displayTotal が from→to へ単調収束・tier 跨ぎ検出）----
 // 描画(canvas)は伴わないロジック部分だけを検証する。update(dt) は ctx 不要で回せる。
 {

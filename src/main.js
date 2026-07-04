@@ -11,6 +11,7 @@ import { Scene } from './render/scene.js';
 import { Keyboard } from './render/keyboard.js';
 import { HouseBar } from './render/housebar.js';
 import { drawTarget } from './render/target.js';
+import { hardCapTotal } from './engine/milestones.js';
 import sfx from './audio/sfx.js';
 import { initInstall } from './install.js';
 import { FONT, loadGameFont } from './font.js';
@@ -57,10 +58,12 @@ function loadTotal() {
   try { return Math.max(0, parseInt(localStorage.getItem('kidtype:total'), 10) || 0); }
   catch (_) { return 0; }
 }
-function addTotal(n) {
-  const next = loadTotal() + Math.max(0, n | 0);
-  try { localStorage.setItem('kidtype:total', String(next)); } catch (_) {}
-  return next;
+// 今回のラウンドで確定した累計スコアを保存する（引数はそのまま書き込む確定値）。
+// 1ラウンドあたりの加算上限（家プログレスのハードキャップ）は呼び出し側で hardCapTotal が算出する。
+function saveTotal(n) {
+  const v = Math.max(0, Number.isFinite(n) ? Math.floor(n) : 0);
+  try { localStorage.setItem('kidtype:total', String(v)); } catch (_) {}
+  return v;
 }
 
 // ---------- レイアウト ----------
@@ -141,7 +144,9 @@ function finishRound() {
   const isNewBest = saveBest(round.stage, score, stars);
   // 累計スコアに加算 → 家の tier が上がったか判定（tier 変換は Scene 経由で milestones を参照）。
   const beforeTotal = loadTotal();
-  const afterTotal = addTotal(score);
+  // 家プログレスは1ラウンドで最大1段だけ進める（次の次のしきい値の直前で頭打ち）。溢れた分は捨てる
+  // ＝貯めない・後で戻さない。キャップは純関数 hardCapTotal に委譲し、確定値を kidtype:total に保存。
+  const afterTotal = saveTotal(hardCapTotal(beforeTotal, score));
   const houseLeveledUp = scene.houseTierForTotal(afterTotal) > scene.houseTierForTotal(beforeTotal);
   // 家 tier を即更新 → 結果画面の背景に新しい家が反映される（ステージ選択へ戻るのを待たない）。
   scene.setTotal(afterTotal);
