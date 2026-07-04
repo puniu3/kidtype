@@ -5,6 +5,7 @@ import { Progress, Stage } from '../src/engine/progress.js';
 import { kataToHira } from '../src/engine/kana.js';
 import { WORDS, SENTENCES, LONG_SENTENCES, POOLS, lvOfId } from '../src/engine/content.js';
 import { pickRoundIds } from '../src/engine/round.js';
+import { TILE_GAP, SPACE_GAP, lineUnits, bestSplit, requiredUnits, poolMaxUnits, layoutRanges } from '../src/engine/tilelayout.js';
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -582,6 +583,105 @@ rejects('ぱん や', 'panya');
   cross.setTotal(afterTotal);
   eq(cross.houseTier, houseLevelForTotal(afterTotal), 'crossing a milestone bumps tier at once (no navigation needed)');
   eq(cross.houseTier, 1, 'tier becomes 1 (たきび) right after the round total crosses');
+}
+
+// ============ タイル行分割・ステージ統一サイズ（engine/tilelayout.js） ============
+// 「同一ステージ内で問題ごとにタイル辺長が変わる（1 行フィット縮小）」の廃止を固定する。
+// 幅の勘定・2 行分割・字（チャンク）を割らないこと・コーパス全体の不変条件を検証。
+{
+  const near = (a, b, msg) => ok(Math.abs(a - b) < 1e-9, `${msg} :: got ${a} want ${b}`);
+  const U = (k) => (k > 0 ? k * (1 + TILE_GAP) - TILE_GAP : 0);   // 実タイル k 個 1 行の幅（s 単位）
+
+  // --- lineUnits: 幅の勘定は drawTarget と同一（タイル=1+GAP・行末 GAP 差し引き）---
+  near(lineUnits(toChunks('あ')), 1, 'lineUnits: 1 タイル = 1');
+  near(lineUnits(toChunks('あい')), U(2), 'lineUnits: 2 タイル');
+  near(lineUnits(toChunks('つるはしでいしをたくさんほる')), U(14), 'lineUnits: 14 かな = 14 タイル');
+  // 拗音・促音はまとまり＝1 タイルの勘定（きゃ / っぱ を割らない）
+  near(lineUnits(toChunks('きゃ')), 1, 'lineUnits: きゃ = 1 タイル');
+  near(lineUnits(toChunks('らっぱ')), U(2), 'lineUnits: らっぱ = ら + っぱ の 2 タイル');
+  // 空白(auto)は SPACE_GAP 幅。行端の空白は幅に入れない。
+  near(lineUnits(toChunks('あ い')), 2 + TILE_GAP + SPACE_GAP, 'lineUnits: 空白は SPACE_GAP 幅');
+  near(lineUnits(toChunks(' あい ')), U(2), 'lineUnits: 行端の空白は幅に入れない');
+  // 部分範囲: [start,end) 指定で行単位の幅が出る
+  const c14 = toChunks('つるはしでいしをたくさんほる');
+  near(lineUnits(c14, 0, 7), U(7), 'lineUnits: 範囲 [0,7) = 7 タイル');
+  near(lineUnits(c14, 7, 14), U(7), 'lineUnits: 範囲 [7,14) = 7 タイル');
+
+  // --- bestSplit: 均等分割・チャンク境界のみ・同幅なら上の行が長い ---
+  const s14 = bestSplit(c14);
+  eq(s14.ranges.length, 2, 'bestSplit: 14 タイルは 2 行');
+  eq(s14.ranges[0][1] - s14.ranges[0][0], 7, 'bestSplit: 14 → 7+7（1 行目）');
+  eq(s14.ranges[1][1] - s14.ranges[1][0], 7, 'bestSplit: 14 → 7+7（2 行目）');
+  near(s14.units, U(7), 'bestSplit: 広い方の行 = 7 タイル幅');
+  const s9 = bestSplit(toChunks('バケツでみずをくむ'));
+  eq(s9.ranges[0][1] - s9.ranges[0][0], 5, 'bestSplit: 奇数 9 → 5+4（上が長い）');
+  eq(s9.ranges[1][1] - s9.ranges[1][0], 4, 'bestSplit: 奇数 9 → 5+4（下が短い）');
+  // 促音まとまりを 1 タイルで数える: クッキーをたべよう = ク|ッキ|ー|を|た|べ|よ|う (8)
+  const ck = toChunks('クッキーをたべよう');
+  eq(ck.filter((c) => !c.auto).length, 8, 'クッキーをたべよう = 8 タイル');
+  const s8 = bestSplit(ck);
+  eq(s8.ranges[0][1] - s8.ranges[0][0], 4, 'bestSplit: 8 → 4+4');
+  eq(s8.ranges[0][1], s8.ranges[1][0], 'bestSplit: 行は連続範囲（チャンク欠落なし）');
+  // 空白境界があればそこで折る（語の途中で折らない）
+  const sp = bestSplit(toChunks('あいうえお かきく'));
+  eq(sp.ranges[0][1], 5, 'bestSplit: 空白の切れ目で折る（1 行目は空白の手前まで）');
+  eq(sp.ranges[1][0], 6, 'bestSplit: 折り返しが空白を吸収（2 行目は空白の次から）');
+  // 1 タイルは分割不能 → 1 行のまま
+  eq(bestSplit(toChunks('き')).ranges.length, 1, 'bestSplit: 1 タイルは 1 行のまま');
+
+  // --- requiredUnits / layoutRanges ---
+  near(requiredUnits(toChunks('レッドストーン'), 1), U(6), 'requiredUnits(1 行): レッドストーン = 6 タイル幅');
+  near(requiredUnits(c14, 2), U(7), 'requiredUnits(2 行): 14 タイル → 7 タイル幅');
+  const c10 = toChunks('ようがんにきをつけて');
+  eq(layoutRanges(c10, U(10)).length, 1, 'layoutRanges: 容量内なら 1 行');
+  const two = layoutRanges(c10, U(9));
+  eq(two.length, 2, 'layoutRanges: あふれたら 2 行');
+  eq(two[0][1] - two[0][0], 5, 'layoutRanges: 10 → 5+5');
+
+  // --- コーパス不変条件: ステージ統一サイズで「全」問題が許容行数に収まる ---
+  // poolMaxUnits で辺長を決めたとき、プールのどの問題も 行数 ≤ 上限・各行 ≤ 許容幅・
+  // タイル欠落なし。コーパスが拡充されても（最長が伸びても）自動で成立し続ける。
+  const stagePool = {
+    3: WORDS.map((w) => w.kana),
+    4: SENTENCES.map((s) => s.text),
+    5: LONG_SENTENCES.map((s) => s.text),
+  };
+  const maxLinesOf = { 3: 1, 4: 2, 5: 2 };
+  for (const stage of [3, 4, 5]) {
+    const lists = stagePool[stage].map(toChunks);
+    const cap = poolMaxUnits(lists, maxLinesOf[stage]);
+    let linesOk = true, widthOk = true, coverOk = true;
+    for (const chunks of lists) {
+      const lines = layoutRanges(chunks, cap);
+      if (lines.length > maxLinesOf[stage]) linesOk = false;
+      for (const [a, b] of lines) if (lineUnits(chunks, a, b) > cap + 1e-9) widthOk = false;
+      const drawn = new Set();
+      for (const [a, b] of lines) for (let i = a; i < b; i++) drawn.add(i);
+      chunks.forEach((c, i) => { if (!c.auto && !drawn.has(i)) coverOk = false; });
+    }
+    ok(linesOk, `tilelayout stage${stage}: 統一サイズで全問題が ${maxLinesOf[stage]} 行以内`);
+    ok(widthOk, `tilelayout stage${stage}: どの行も統一サイズの許容幅以内`);
+    ok(coverOk, `tilelayout stage${stage}: 折り返しでタイルが 1 枚も欠けない`);
+  }
+}
+
+// ============ ステージ統一サイズの導出（render/target.js stageTileUnits） ============
+// 描画側が使う導出値がコーパス（POOLS 全体）と一致し続けることを固定。
+// コーパス拡充で最長が変わっても、この検証は自動で新しい最長に追従する。
+{
+  const near = (a, b, msg) => ok(Math.abs(a - b) < 1e-9, `${msg} :: got ${a} want ${b}`);
+  const { stageTileUnits, STAGE_MAX_LINES } = await import('../src/render/target.js');
+  eq(STAGE_MAX_LINES[3], 1, 'target: たんご は 1 行固定');
+  eq(STAGE_MAX_LINES[4], 2, 'target: ぶんしょう は 2 行まで');
+  eq(STAGE_MAX_LINES[5], 2, 'target: ながいぶん は 2 行まで');
+  near(stageTileUnits(3), poolMaxUnits(WORDS.map((w) => toChunks(w.kana)), 1),
+    'target: stage3 の統一幅 = WORDS プール全体の最大幅');
+  near(stageTileUnits(4), poolMaxUnits(SENTENCES.map((s) => toChunks(s.text)), 2),
+    'target: stage4 の統一幅 = SENTENCES プール全体の最大幅（2 行許容）');
+  near(stageTileUnits(5), poolMaxUnits(LONG_SENTENCES.map((s) => toChunks(s.text)), 2),
+    'target: stage5 の統一幅 = LONG_SENTENCES プール全体の最大幅（2 行許容）');
+  // メモ化されても値は安定
+  near(stageTileUnits(5), stageTileUnits(5), 'target: stageTileUnits はメモ化後も同値');
 }
 
 // ---- 結果 ----
