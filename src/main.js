@@ -9,6 +9,7 @@ import { scoreRound } from './engine/score.js';
 import { pickRoundIds } from './engine/round.js';
 import { Scene } from './render/scene.js';
 import { Keyboard } from './render/keyboard.js';
+import { HouseBar } from './render/housebar.js';
 import sfx from './audio/sfx.js';
 import { initInstall } from './install.js';
 
@@ -24,6 +25,7 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const scene = new Scene();
 const keyboard = new Keyboard();
+const houseBar = new HouseBar();   // 家のプログレスバー（タイトル・結果画面に描く）
 
 let DPR = 1, W = 0, H = 0;
 let layout = { hud: 60, world: { x: 0, y: 60, w: 0, h: 0 }, kb: { x: 0, y: 0, w: 0, h: 0 }, mute: { x: 0, y: 0, w: 0, h: 0 } };
@@ -144,6 +146,8 @@ function finishRound() {
   const houseLeveledUp = scene.houseTierForTotal(afterTotal) > scene.houseTierForTotal(beforeTotal);
   // 家 tier を即更新 → 結果画面の背景に新しい家が反映される（ステージ選択へ戻るのを待たない）。
   scene.setTotal(afterTotal);
+  // 家プログレスバーへ「今回の得点が注ぎ込まれる」演出を開始（バーは before から after へ伸びる）。
+  houseBar.startPour(beforeTotal, afterTotal);
   result = { stage: round.stage, timeMs, accuracy, score, stars, isNewBest, best: loadBest(round.stage), houseLeveledUp };
   screen = 'result';
   if (stars >= 3 || houseLeveledUp) sfx.stageup(); else sfx.levelup();
@@ -344,6 +348,11 @@ function drawTitle(c) {
   c.fillStyle = 'rgba(255,255,255,0.82)'; c.font = `700 ${Math.round(Math.min(20, W * 0.024))}px ${FONT}`;
   c.fillText(`いまの おうち：${scene.currentHouseName()}`, W / 2, ty + 28);
 
+  // 家プログレスバー（次のおうちマイルストーンまでの到達度）。
+  houseBar.setTotal(total);
+  const hbW = Math.min(420, W * 0.46), hbH = Math.max(16, Math.min(24, H * 0.028));
+  houseBar.draw(c, { x: W / 2 - hbW / 2, y: ty + 46, w: hbW, h: hbH, font: FONT });
+
   // 5枚のステージカード
   const cols = 5, gap = Math.min(28, W * 0.025);
   const cw = Math.min(240, (W * 0.86 - gap * (cols - 1)) / cols);
@@ -400,21 +409,26 @@ function drawResult(c) {
   const ss = Math.min(64, W * 0.07);
   stars(c, cx - (ss * 3 + 12 * 2) / 2, H * 0.32, ss, result.stars, 12);
 
-  // パネル（タイム・正解率・スコア）
-  const pw = Math.min(520, W * 0.6), px = cx - pw / 2, py = H * 0.42, ph = H * 0.26;
+  // パネル（タイム・正解率・スコア＋家プログレスバー）
+  const pw = Math.min(520, W * 0.6), px = cx - pw / 2, py = H * 0.42, ph = H * 0.30;
   c.fillStyle = 'rgba(20,16,12,0.6)'; roundRect(c, px, py, pw, ph, 16); c.fill();
   const seconds = (result.timeMs / 1000).toFixed(1);
   const accPct = Math.round(result.accuracy * 100);
-  const rowY = (i) => py + ph * (0.24 + i * 0.26);
+  const rowY = (i) => py + ph * (0.21 + i * 0.225);
   const drawRow = (i, label, val, col) => {
-    c.textAlign = 'left'; c.fillStyle = '#cfc8ba'; c.font = `700 ${Math.round(ph * 0.16)}px ${FONT}`;
+    c.textAlign = 'left'; c.fillStyle = '#cfc8ba'; c.font = `700 ${Math.round(ph * 0.14)}px ${FONT}`;
     c.fillText(label, px + pw * 0.12, rowY(i));
-    c.textAlign = 'right'; c.fillStyle = col; c.font = `900 ${Math.round(ph * 0.2)}px ${FONT}`;
+    c.textAlign = 'right'; c.fillStyle = col; c.font = `900 ${Math.round(ph * 0.17)}px ${FONT}`;
     c.fillText(val, px + pw * 0.88, rowY(i));
   };
   drawRow(0, '⏱ じかん', `${seconds} びょう`, '#fff');
   drawRow(1, '🎯 せいかい', `${accPct} %`, accPct >= 90 ? '#3fd6a0' : '#ffd34d');
   drawRow(2, '⭐ スコア', `${result.score}`, '#ffe9a8');
+  // 家プログレスバー：スコア行の下。得点のダイヤはスコアの数字あたりから飛んで注がれる。
+  houseBar.draw(c, {
+    x: px + pw * 0.12, y: py + ph * 0.80, w: pw * 0.76, h: ph * 0.13,
+    font: FONT, sourceX: px + pw * 0.84, sourceY: rowY(2),
+  });
   if (result.isNewBest) {
     c.textAlign = 'center'; c.fillStyle = '#ff6b6b'; c.font = `900 ${Math.round(ph * 0.18)}px ${FONT}`;
     c.fillText('🎉 しんきろく！', cx, py + ph + 26);
@@ -443,6 +457,7 @@ function frame(t) {
   nowT = t / 1000;
   const dt = Math.min(0.05, last ? (nowT - last) : 0); last = nowT;
   scene.update(dt);
+  houseBar.update(dt);
   if (screen === 'play' && current && current.done && nowT >= nextAt) {
     if (round.index >= round.queue.length) finishRound(); else nextRoundItem();
   }
