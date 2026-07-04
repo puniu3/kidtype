@@ -2,7 +2,7 @@
 .butler/
 review/
 
-# stray evidence/probe shots that leak into the repo root (butler evidence belongs in .butler/ready/).
+# stray evidence/probe shots that leak into the repo root (butler evidence belongs in .butler/state/<id>/).
 # root-level only — assets/icons/*.png stay tracked.
 /*.png
 .playwright-mcp/

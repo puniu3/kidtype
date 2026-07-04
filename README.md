@@ -28,12 +28,12 @@
 ## 動かし方（WSL → iPad over LAN）
 
 ```bash
-# キャッシュ無効化ヘッダ付きの開発サーバ（変更が iPad に即反映される）。8011 で待受。
-python3 serve.py 8011        # = npm run serve
+# キャッシュ無効化ヘッダ付きの開発サーバ（変更が iPad に即反映される）。8000 で待受。
+python3 serve.py             # = npm run serve（既定 8000）
 ```
 
-iPad の Safari で **`http://192.168.1.5:8011/`** を開く。
-（8000 は別アプリが使用中だったため 8011。`serve.py` は no-store ヘッダを付けるのでモジュールがキャッシュされない。）
+iPad の Safari で **`http://192.168.1.5:8000/`** を開く。
+（8000 は iPad から届く唯一の firewall 既許可ポート。`serve.py` は no-store ヘッダを付けるのでモジュールがキャッシュされない。）
 
 - 「ホーム画面に追加」でフルスクリーン（standalone）になり、子ども向けに最適。
 - **オフライン化（Service Worker）は HTTPS か localhost でのみ有効。** LAN の http では SW 登録を graceful にスキップ

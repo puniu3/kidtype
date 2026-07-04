@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # 開発用サーバ: キャッシュ無効化ヘッダを付けて配信する。
 # iPad 等のブラウザが ES モジュールをキャッシュして「変更が反映されない」のを防ぐ。
-#   python3 serve.py [PORT]   (既定 8011, 0.0.0.0 で待受)
+#   python3 serve.py [PORT]   (既定 8000, 0.0.0.0 で待受)
 import http.server
 import socketserver
 import sys
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8011
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):

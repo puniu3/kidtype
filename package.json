@@ -6,7 +6,7 @@
   "description": "7歳児向けタイピングゲーム (Minecraft風) — キー → ローマ字 → 単語 → 文章",
   "scripts": {
     "test": "node test/run.mjs",
-    "serve": "python3 serve.py 8011",
+    "serve": "python3 serve.py 8000",
     "build": "node build.mjs"
   }
 }
