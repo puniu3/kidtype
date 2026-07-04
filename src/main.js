@@ -140,6 +140,8 @@ function finishRound() {
   const beforeTotal = loadTotal();
   const afterTotal = addTotal(score);
   const houseLeveledUp = scene.houseTierForTotal(afterTotal) > scene.houseTierForTotal(beforeTotal);
+  // 家 tier を即更新 → 結果画面の背景に新しい家が反映される（ステージ選択へ戻るのを待たない）。
+  scene.setTotal(afterTotal);
   result = { stage: round.stage, timeMs, accuracy, score, stars, isNewBest, best: loadBest(round.stage), houseLeveledUp };
   screen = 'result';
   if (stars >= 3 || houseLeveledUp) sfx.stageup(); else sfx.levelup();
@@ -328,7 +330,7 @@ function drawTitle(c) {
   c.fillStyle = 'rgba(20,16,12,0.5)'; c.fillRect(0, 0, W, H);
   c.textAlign = 'center'; c.textBaseline = 'middle';
   c.fillStyle = '#ffd34d'; c.font = `900 ${Math.round(Math.min(76, W * 0.09))}px ${FONT}`;
-  c.fillText('ブロック タイピング', W / 2, H * 0.16);
+  c.fillText('キッドタイプ', W / 2, H * 0.16);
   c.fillStyle = '#e8e2d6'; c.font = `700 ${Math.round(Math.min(26, W * 0.032))}px ${FONT}`;
   c.fillText('すきな ステージを えらんでね', W / 2, H * 0.16 + 50);
 

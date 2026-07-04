@@ -1,6 +1,6 @@
 {
-  "name": "ブロック タイピング",
-  "short_name": "タイピング",
+  "name": "キッドタイプ",
+  "short_name": "キッドタイプ",
   "description": "7さいからの ブロックで まなぶ タイピングれんしゅう",
   "lang": "ja",
   "start_url": "./index.html",

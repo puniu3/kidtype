@@ -526,6 +526,35 @@ rejects('ぱん や', 'panya');
   eq(houseLevelForTotal(undefined), 0, 'undefined total → tier 0');
 }
 
+// ---- scene.js: 背景の家 tier は「いまの累計スコア」から即反映される ----
+// 回帰防止: ラウンド終了直後（結果画面）に累計がマイルストーンを跨いだら、ステージ選択へ
+// 戻るのを待たずに背景の家 tier が上がっていること。scene が描く tier の唯一の更新点である
+// setTotal() が、渡した total に対して houseTier / currentHouseName を即座に一致させる契約を固定する。
+{
+  const { Scene } = await import('../src/render/scene.js');
+  const { houseLevelForTotal, HOUSE_MILESTONES } = await import('../src/engine/milestones.js');
+
+  // (0) setTotal は描画される tier の唯一の更新窓口。渡した total に対し tier が即一致する。
+  const s = new Scene();
+  eq(s.houseTier, 0, 'fresh scene starts at tier 0 (さらち)');
+  for (let i = 0; i < HOUSE_MILESTONES.length; i++) {
+    const ret = s.setTotal(HOUSE_MILESTONES[i].total);
+    eq(s.houseTier, i, `setTotal(threshold[${i}]) → houseTier ${i} immediately`);
+    eq(ret, i, `setTotal returns the new tier ${i}`);
+    eq(s.currentHouseName(), HOUSE_MILESTONES[i].name, `currentHouseName reflects tier ${i} name`);
+  }
+
+  // (1) 本命シナリオ: マイルストーン直下からラウンド分を加算して跨ぐと、その場で tier が上がる。
+  //     （main.finishRound は afterTotal を setTotal に渡す＝ステージ選択を待たず結果画面に反映）。
+  const cross = new Scene();
+  cross.setTotal(HOUSE_MILESTONES[1].total - 1);   // たきび直前
+  eq(cross.houseTier, 0, 'just below tier 1 threshold → still tier 0 on result screen');
+  const afterTotal = (HOUSE_MILESTONES[1].total - 1) + 5;   // ラウンド得点でしきい値を跨ぐ
+  cross.setTotal(afterTotal);
+  eq(cross.houseTier, houseLevelForTotal(afterTotal), 'crossing a milestone bumps tier at once (no navigation needed)');
+  eq(cross.houseTier, 1, 'tier becomes 1 (たきび) right after the round total crosses');
+}
+
 // ---- 結果 ----
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) { console.log('\nFAILURES:'); for (const f of fails) console.log('  ✗ ' + f); process.exit(1); }
