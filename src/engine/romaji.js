@@ -67,7 +67,7 @@ const DIGRAPH = {
   うぃ: ['wi'], うぇ: ['we'], うぉ: ['who'],
   ゔぁ: ['va'], ゔぃ: ['vi'], ゔぇ: ['ve'], ゔぉ: ['vo'],
   てぃ: ['thi'], でぃ: ['dhi'], とぅ: ['twu'], どぅ: ['dwu'],
-  ちぇ: ['che'], じぇ: ['je'], しぇ: ['she'],
+  ちぇ: ['che', 'tye'], じぇ: ['je', 'jye', 'zye'], しぇ: ['she', 'sye'],
 };
 
 const VOWELS = 'aiueo';

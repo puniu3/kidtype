@@ -172,6 +172,13 @@ accepts('しゃ', 'sha'); accepts('しゃ', 'sya');
 accepts('ちゃ', 'cha'); accepts('ちゃ', 'tya');
 accepts('じゃ', 'ja'); accepts('じゃ', 'jya'); accepts('じゃ', 'zya');
 
+// ---- ぇ拗音（外来音）: canonical と ty-/sy-/zy- 別形を ゃゅょ 行と揃える ----
+// (kataToHira: チェ→ちぇ, ジェ→じぇ, シェ→しぇ を前提に)
+eq(kataToHira('チェ'), 'ちぇ', 'チェ→ちぇ'); eq(kataToHira('ジェ'), 'じぇ', 'ジェ→じぇ'); eq(kataToHira('シェ'), 'しぇ', 'シェ→しぇ');
+accepts('チェスト', 'chesuto'); accepts('チェスト', 'tyesuto');
+accepts('ジェット', 'jetto');   accepts('ジェット', 'jyetto'); accepts('ジェット', 'zyetto');
+accepts('シェフ', 'shefu');     accepts('シェフ', 'syefu');
+
 // ---- 促音 ----
 accepts('がっこう', 'gakkou');
 accepts('きって', 'kitte');
