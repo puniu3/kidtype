@@ -526,6 +526,105 @@ rejects('ぱん や', 'panya');
   eq(houseLevelForTotal(undefined), 0, 'undefined total → tier 0');
 }
 
+// ---- milestones.js: houseProgress（家プログレスバー — 次のマイルストーンへの到達割合）----
+{
+  const { houseProgress, houseLevelForTotal, HOUSE_MILESTONES } = await import('../src/engine/milestones.js');
+  const top = HOUSE_MILESTONES.length - 1;
+
+  // (1) 各しきい値ちょうど → その tier の 0%（next・remain も正しい）
+  for (let i = 0; i < top; i++) {
+    const p = houseProgress(HOUSE_MILESTONES[i].total);
+    eq(p.tier, i, `houseProgress at threshold[${i}] → tier ${i}`);
+    eq(p.frac, 0, `houseProgress at threshold[${i}] → frac 0 (bar resets on entering a tier)`);
+    eq(p.next, HOUSE_MILESTONES[i + 1].total, `houseProgress tier ${i} next == threshold[${i + 1}]`);
+    eq(p.remain, HOUSE_MILESTONES[i + 1].total - HOUSE_MILESTONES[i].total, `houseProgress tier ${i} remain == full span`);
+  }
+  // (2) 区間の中間点 → frac 0.5
+  {
+    const mid = (HOUSE_MILESTONES[1].total + HOUSE_MILESTONES[2].total) / 2;
+    const p = houseProgress(mid);
+    eq(p.tier, 1, 'midpoint of tier1..2 stays tier 1');
+    ok(Math.abs(p.frac - 0.5) < 1e-9, `midpoint → frac 0.5 (got ${p.frac})`);
+  }
+  // (3) しきい値の 1 点手前 → frac は 1 未満・remain 1。跨いだ瞬間に frac 0（バーのリセット点）。
+  {
+    const p = houseProgress(HOUSE_MILESTONES[2].total - 1);
+    eq(p.tier, 1, 'just below threshold[2] → still tier 1');
+    ok(p.frac > 0.9 && p.frac < 1, `just below threshold → frac just under 1 (got ${p.frac})`);
+    eq(p.remain, 1, 'just below threshold → remain 1');
+    eq(houseProgress(HOUSE_MILESTONES[2].total).frac, 0, 'crossing resets bar frac to 0 for the next tier');
+  }
+  // (4) 最上位 tier → バーは常に満タン・next なし・remain 0
+  {
+    const p = houseProgress(HOUSE_MILESTONES[top].total + 99999);
+    eq(p.tier, top, 'beyond max → top tier');
+    eq(p.frac, 1, 'top tier → frac pinned at 1 (bar full forever)');
+    eq(p.next, null, 'top tier → next null');
+    eq(p.remain, 0, 'top tier → remain 0');
+  }
+  // (5) frac は常に [0,1]。tier+frac（バーの見かけの総進捗）は total に対して単調非減少。
+  {
+    let prev = -1, mono = true, range = true;
+    for (let t = 0; t <= HOUSE_MILESTONES[top].total + 5000; t += 97) {
+      const p = houseProgress(t);
+      if (p.frac < 0 || p.frac > 1) range = false;
+      const gp = p.tier + p.frac;
+      if (gp < prev - 1e-9) mono = false;
+      prev = gp;
+    }
+    ok(range, 'houseProgress frac always within [0,1]');
+    ok(mono, 'houseProgress tier+frac never goes backwards as total grows');
+  }
+  // (6) tier は houseLevelForTotal と常に一致（バーと背景の家のズレ防止）
+  {
+    let agree = true;
+    for (let t = 0; t <= HOUSE_MILESTONES[top].total + 5000; t += 137)
+      if (houseProgress(t).tier !== houseLevelForTotal(t)) agree = false;
+    ok(agree, 'houseProgress.tier always agrees with houseLevelForTotal');
+  }
+  // (7) 異常入力（負値・非数）→ tier0 の 0%
+  ok(houseProgress(-42).tier === 0 && houseProgress(-42).frac === 0, 'negative total → tier0 frac0');
+  ok(houseProgress(NaN).tier === 0 && houseProgress(NaN).frac === 0, 'NaN total → tier0 frac0');
+}
+
+// ---- housebar.js: 注ぎ込み演出のロジック（displayTotal が from→to へ単調収束・tier 跨ぎ検出）----
+// 描画(canvas)は伴わないロジック部分だけを検証する。update(dt) は ctx 不要で回せる。
+{
+  const { HouseBar } = await import('../src/render/housebar.js');
+
+  // (1) setTotal は即時反映・info() は displayTotal から進捗を導く
+  const b = new HouseBar();
+  b.setTotal(1234);
+  eq(b.displayTotal, 1234, 'housebar setTotal reflects immediately');
+  eq(b.info().tier, 2, 'housebar info() derives tier from displayTotal (1234 → こや)');
+
+  // (2) 注ぎ込み: from で始まり、update を進めると to へ単調に伸びて演出が終わる
+  const p = new HouseBar();
+  p.geom = { x: 0, y: 0, w: 100, h: 10, font: 'sans-serif' };  // draw 抜きでも動くよう配置だけ与える
+  p.startPour(400, 900);                                        // たきび(500) を跨ぐケース
+  eq(p.displayTotal, 400, 'pour starts displaying from (not to)');
+  let prevTotal = -1, mono = true;
+  for (let i = 0; i < 600; i++) {                               // 10 秒ぶん — 余裕を持って完走
+    p.update(1 / 60);
+    if (p.displayTotal < prevTotal) mono = false;
+    prevTotal = p.displayTotal;
+  }
+  ok(mono, 'pour: displayTotal never decreases while filling');
+  eq(p.displayTotal, 900, 'pour converges displayTotal to the new total');
+  eq(p.pour, null, 'pour finishes and clears its state');
+  eq(p.flyers.length, 0, 'no flyers left after the pour ends');
+
+  // (3) マイルストーン跨ぎを検出して celebration 状態（lastTier）が進んでいる
+  eq(p.lastTier, 1, 'crossing 500 during the pour bumps lastTier to 1 (たきび)');
+
+  // (4) 注ぎ込み中の setTotal は無視される（演出が総量を管理）
+  const q = new HouseBar();
+  q.geom = { x: 0, y: 0, w: 100, h: 10 };
+  q.startPour(0, 100);
+  q.setTotal(9999);
+  ok(q.displayTotal <= 100, 'setTotal during an active pour is ignored');
+}
+
 // ---- scene.js: 背景の家 tier は「いまの累計スコア」から即反映される ----
 // 回帰防止: ラウンド終了直後（結果画面）に累計がマイルストーンを跨いだら、ステージ選択へ
 // 戻るのを待たずに背景の家 tier が上がっていること。scene が描く tier の唯一の更新点である

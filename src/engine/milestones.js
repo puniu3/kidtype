@@ -38,3 +38,19 @@ export function houseLevelForTotal(total) {
 export function houseName(total) {
   return HOUSE_MILESTONES[houseLevelForTotal(total)].name;
 }
+
+// 家プログレスバー用: いまの tier 内で「次のマイルストーン」へどこまで届いたか。
+//   tier   … いまの tier（houseLevelForTotal と同じ値）
+//   frac   … 次のしきい値への到達割合 0..1（最上位 tier は常に 1＝満タン）
+//   cur    … いまの tier のしきい値
+//   next   … 次のしきい値（最上位なら null）
+//   remain … 次のしきい値まで残り（最上位なら 0）
+export function houseProgress(total) {
+  const t = Math.max(0, Number.isFinite(total) ? total : 0);
+  const tier = houseLevelForTotal(t);
+  const cur = HOUSE_MILESTONES[tier].total;
+  const next = tier + 1 < HOUSE_MILESTONES.length ? HOUSE_MILESTONES[tier + 1].total : null;
+  if (next == null) return { tier, frac: 1, cur, next: null, remain: 0 };
+  const frac = Math.max(0, Math.min(1, (t - cur) / (next - cur)));
+  return { tier, frac, cur, next, remain: Math.max(0, next - t) };
+}
