@@ -76,7 +76,7 @@ function rejects(target, seq) {
 // ============ ラウンド出題サンプラ（round.js pickRoundIds）の検証 ============
 // buildRound が「プール前方 N*2 件」だけ抽選していた回帰の防止。
 //   1) 到達性: seed 付き多数ドローで、各ステージのプール全 id が最低 1 回出る
-//      （特に stage3 の w0..w109 / stage4 の s0..s41 = 拡充した新語が出ること）。
+//      （特に stage3 の w0..w165 / stage4 の s0..s53 = 拡充した新語が出ること）。
 //   2) 各ラウンドは count 件すべて distinct で、プールの正規メンバーであること。
 //   3) 難易度: lv 付き stage3/4 は 1 ラウンドが全 lv4 にならず、易しい lv1 を必ず含む。
 {
@@ -120,8 +120,8 @@ function rejects(target, seq) {
     }
   }
 
-  // 旧バグの明示的回帰: 拡充で増えた末尾 id（w109 / 各プールの末尾）が必ず到達できること。
-  // 長文を Stage5 へ移したので SENTENCES は 36 件（s0..s35）に縮み、末尾 id は s35。
+  // 旧バグの明示的回帰: 拡充で増えた末尾 id（w165 / 各プールの末尾）が必ず到達できること。
+  // corpus2 で拡充し WORDS=166(w0..w165) / SENTENCES=54(s0..s53) / LONG=32(l0..l31)。末尾 id は動的に取る。
   {
     const rng = makeRng(424242);
     const seenW = new Set(), seenS = new Set(), seenL = new Set();
