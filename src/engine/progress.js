@@ -5,6 +5,7 @@
 //   2 KANA     … かな1文字 → ローマ字（対応の習得）
 //   3 WORD     … 単語（ひらがな/カタカナ）
 //   4 SENTENCE … 短い文章
+//   5 LONG     … 長文（ぶんしょうの上・10かな以上の長い文）
 //
 // 習熟(mastery)の考え方:
 //   各「項目(item)」ごとに直近の結果リング(correct/time)を持ち、
@@ -13,14 +14,14 @@
 //
 // 永続化: localStorage（ブラウザ）。Node テスト時は in-memory に fallback。
 
-export const Stage = { KEY: 1, KANA: 2, WORD: 3, SENTENCE: 4 };
+export const Stage = { KEY: 1, KANA: 2, WORD: 3, SENTENCE: 4, LONG: 5 };
 
 const WINDOW = 6;        // 直近何回を見るか
 const NEED_CORRECT = 5;  // そのうち何回正解で master 候補
 const STUCK_SEEN = 8;    // これ以上出題しても未習得なら「行き詰まり」とみなす
 // 段階ごとの「1項目あたり許容時間(ms)」。record() で時間は「1かなあたり」に正規化済み
 // なので、単語/文(3/4)を単キー(2)より厳しくしてはいけない（語境界の思考分むしろ緩め）。
-const SPEED_MS = { 1: 1500, 2: 2600, 3: 2400, 4: 2200 };
+const SPEED_MS = { 1: 1500, 2: 2600, 3: 2400, 4: 2200, 5: 2200 };
 
 const MEM = {}; // Node 用 in-memory store
 
@@ -51,7 +52,7 @@ export class Progress {
       stage: Stage.KEY,        // 現在プレイ中の段階
       unlocked: Stage.KEY,     // 解禁済みの最高段階
       items: {},               // id -> { res:[bool], time:[ms], seen, mastered }
-      introduced: { 1: [], 2: [], 3: [], 4: [] }, // 各段階で解禁済みの item id
+      introduced: { 1: [], 2: [], 3: [], 4: [], 5: [] }, // 各段階で解禁済みの item id
       totals: { attempts: 0, correct: 0, keys: 0, keyErrors: 0 },
     };
   }
@@ -72,7 +73,7 @@ export class Progress {
     if (typeof d.unlocked === 'number') out.unlocked = d.unlocked;
     if (d.items && typeof d.items === 'object') out.items = d.items;
     if (d.introduced && typeof d.introduced === 'object') {
-      for (const k of [1, 2, 3, 4]) if (Array.isArray(d.introduced[k])) out.introduced[k] = d.introduced[k];
+      for (const k of [1, 2, 3, 4, 5]) if (Array.isArray(d.introduced[k])) out.introduced[k] = d.introduced[k];
     }
     if (d.totals && typeof d.totals === 'object') out.totals = { ...out.totals, ...d.totals };
     return out;
@@ -158,7 +159,7 @@ export class Progress {
   }
 
   unlockNext(stage) {
-    if (stage >= Stage.SENTENCE) return false;
+    if (stage >= Stage.LONG) return false;
     if (this.data.unlocked < stage + 1) {
       this.data.unlocked = stage + 1;
       this.save();

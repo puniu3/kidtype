@@ -3,7 +3,7 @@ import { toChunks, canonicalRomaji, kanaToRomaji } from '../src/engine/romaji.js
 import { Matcher, matcherFor } from '../src/engine/matcher.js';
 import { Progress, Stage } from '../src/engine/progress.js';
 import { kataToHira } from '../src/engine/kana.js';
-import { WORDS, SENTENCES, POOLS, lvOfId } from '../src/engine/content.js';
+import { WORDS, SENTENCES, LONG_SENTENCES, POOLS, lvOfId } from '../src/engine/content.js';
 import { pickRoundIds } from '../src/engine/round.js';
 
 let pass = 0, fail = 0;
@@ -47,15 +47,30 @@ function rejects(target, seq) {
     ok(Number.isInteger(w.lv) && w.lv >= 1 && w.lv <= 4, `WORD "${w.kana}" lv in 1..4 (got ${w.lv})`);
     typeable(`WORD "${w.kana}"`, w.kana);
   }
+  const klen = (str) => [...str].length; // 表示かな数（長さの分割しきい値に使う）
+  const LONG_MIN = 10;                    // 「ながいぶん」の下限（10かな以上を長文とみなす）
   for (const s of SENTENCES) {
     ok(Number.isInteger(s.lv) && s.lv >= 1 && s.lv <= 4, `SENTENCE "${s.text}" lv in 1..4 (got ${s.lv})`);
+    // 分割の不変条件: ぶんしょう(4) には「らくに読める中くらいの長さ」だけ残す（10かな未満）。
+    ok(klen(s.text) < LONG_MIN, `SENTENCE "${s.text}" stays mid-length (< ${LONG_MIN} kana, got ${klen(s.text)})`);
     typeable(`SENTENCE`, s.text);
   }
-  // 重複検出（WORDS.kana / SENTENCES.text とも一意であること）
+  // Stage5 長文コーパス: 全エントリが打鍵可能・lv 1..4・かつ genuinely long（10かな以上）。
+  for (const s of LONG_SENTENCES) {
+    ok(Number.isInteger(s.lv) && s.lv >= 1 && s.lv <= 4, `LONG "${s.text}" lv in 1..4 (got ${s.lv})`);
+    ok(klen(s.text) >= LONG_MIN, `LONG "${s.text}" is genuinely long (>= ${LONG_MIN} kana, got ${klen(s.text)})`);
+    typeable(`LONG`, s.text);
+  }
+  // 長文ステージは round 不変条件（各 lv tier 到達・毎ラウンド lv1 を含む）のため全 tier を持つ。
+  for (const lv of [1, 2, 3, 4]) ok(LONG_SENTENCES.some((s) => s.lv === lv), `LONG has at least one lv${lv} entry`);
+  // 重複検出（WORDS.kana / SENTENCES.text / LONG_SENTENCES.text とも一意・かつステージ間で重複なし）
   const wset = new Set(WORDS.map((w) => w.kana));
   eq(wset.size, WORDS.length, 'WORDS kana are all unique (no duplicates)');
   const sset = new Set(SENTENCES.map((s) => s.text));
   eq(sset.size, SENTENCES.length, 'SENTENCES text are all unique (no duplicates)');
+  const lset = new Set(LONG_SENTENCES.map((s) => s.text));
+  eq(lset.size, LONG_SENTENCES.length, 'LONG_SENTENCES text are all unique (no duplicates)');
+  ok(![...lset].some((t) => sset.has(t)), 'LONG_SENTENCES do not overlap SENTENCES (each problem lives in one stage)');
 }
 
 // ============ ラウンド出題サンプラ（round.js pickRoundIds）の検証 ============
@@ -65,14 +80,14 @@ function rejects(target, seq) {
 //   2) 各ラウンドは count 件すべて distinct で、プールの正規メンバーであること。
 //   3) 難易度: lv 付き stage3/4 は 1 ラウンドが全 lv4 にならず、易しい lv1 を必ず含む。
 {
-  const ROUND_COUNT = { 1: 16, 2: 14, 3: 8, 4: 5 };
+  const ROUND_COUNT = { 1: 16, 2: 14, 3: 8, 4: 5, 5: 4 };
   // 決定的な seed 付き rng（LCG）。テスト再現性のため Math.random は使わない。
   const makeRng = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; };
 
-  for (const stage of [1, 2, 3, 4]) {
+  for (const stage of [1, 2, 3, 4, 5]) {
     const pool = POOLS[stage];
     const count = ROUND_COUNT[stage];
-    const lvOf = (stage === 3 || stage === 4) ? lvOfId : null;
+    const lvOf = (stage === 3 || stage === 4 || stage === 5) ? lvOfId : null;
     const poolSet = new Set(pool);
     const rng = makeRng(0x9e37 + stage);
     const seen = new Set();
@@ -105,18 +120,24 @@ function rejects(target, seq) {
     }
   }
 
-  // 旧バグの明示的回帰: 拡充で増えた末尾 id（w109 / s41）が必ず到達できること。
+  // 旧バグの明示的回帰: 拡充で増えた末尾 id（w109 / 各プールの末尾）が必ず到達できること。
+  // 長文を Stage5 へ移したので SENTENCES は 36 件（s0..s35）に縮み、末尾 id は s35。
   {
     const rng = makeRng(424242);
-    const seenW = new Set(), seenS = new Set();
+    const seenW = new Set(), seenS = new Set(), seenL = new Set();
+    const lastS = POOLS[4][POOLS[4].length - 1];   // 's35'
+    const lastL = POOLS[5][POOLS[5].length - 1];   // 'l19'
     for (let k = 0; k < 4000; k++) {
       for (const id of pickRoundIds(3, { pool: POOLS[3], lvOf: lvOfId, count: 8, rng })) seenW.add(id);
       for (const id of pickRoundIds(4, { pool: POOLS[4], lvOf: lvOfId, count: 5, rng })) seenS.add(id);
+      for (const id of pickRoundIds(5, { pool: POOLS[5], lvOf: lvOfId, count: 4, rng })) seenL.add(id);
     }
     ok(seenW.has('w109') && seenW.has('w74') && seenW.has('w50'),
       'pickRoundIds: newly-added WORD ids (w50/w74/w109) are reachable');
-    ok(seenS.has('s41') && seenS.has('s20') && seenS.has('s10'),
-      'pickRoundIds: newly-added SENTENCE ids (s10/s20/s41) are reachable');
+    ok(seenS.has(lastS) && seenS.has('s20') && seenS.has('s10'),
+      `pickRoundIds: last/mid SENTENCE ids (s10/s20/${lastS}) are reachable`);
+    ok(seenL.has(lastL) && seenL.has('l0') && seenL.has('l10'),
+      `pickRoundIds: LONG stage ids (l0/l10/${lastL}) are reachable`);
   }
 }
 
@@ -250,6 +271,14 @@ accepts('ブロックを ほる', 'burokkuwohoru');
   ok(p.unlockNext(2), 'unlockNext returns true first time');
   ok(!p.unlockNext(2), 'unlockNext idempotent');
   eq(p.data.unlocked, Stage.WORD, 'unlocked advanced to WORD');
+}
+// 長文(LONG=5)が新しい最上段: ぶんしょう(4)クリアで LONG を解禁し、LONG より上は無い。
+{
+  const p = new Progress('test-longstage-' + pass);
+  p.reset();
+  ok(p.unlockNext(Stage.SENTENCE), 'clearing ぶんしょう unlocks LONG (stage 5)');
+  eq(p.data.unlocked, Stage.LONG, 'unlocked advanced to LONG');
+  ok(!p.unlockNext(Stage.LONG), 'LONG is terminal: no stage above it');
 }
 // pick: 新規を優先（固定rng）
 {

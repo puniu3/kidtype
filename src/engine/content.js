@@ -6,6 +6,7 @@
 //  - KANA_ORDER: Stage2 で導入するかな（清音→濁音→拗音）。
 //  - WORDS     : Stage3 の単語。kana=表示, e=絵文字アイコン, lv=難易度。
 //  - SENTENCES : Stage4 の短い文。日本語なので語の区切り(スペース)は無し。そのまま続けて打つ。
+//  - LONG_SENTENCES : Stage5 の長文（ぶんしょうの上）。10かな以上の「ながい」文だけ。
 
 // Stage1: 単キー導入順（実用＝早くかなを打てる順）
 export const KEY_ORDER = [
@@ -174,8 +175,6 @@ export const SENTENCES = [
   { text: 'よるはゾンビがくる', lv: 3 },
   { text: 'ダイヤをみつけた', lv: 3 },
   { text: 'いえをつくろう', lv: 3 },
-  { text: 'ようがんにきをつけて', lv: 4 },
-  { text: 'クリーパーがばくはつした', lv: 4 },
 
   // ── 拡充（/butler corpus）──────────────────────────────
   // lv1: みじかい・清音中心
@@ -198,7 +197,6 @@ export const SENTENCES = [
   { text: 'たからをさがす', lv: 2 },
   // lv3: カタカナ語・濁音まじり
   { text: 'ゾンビからにげる', lv: 3 },
-  { text: 'スケルトンがあらわれた', lv: 3 },
   { text: 'トロッコにのる', lv: 3 },
   { text: 'パンをやく', lv: 3 },
   { text: 'バケツでみずをくむ', lv: 3 },
@@ -206,33 +204,64 @@ export const SENTENCES = [
   { text: 'サボテンにさわる', lv: 3 },
   { text: 'ベッドでねむる', lv: 3 },
   // lv4: 長音ー・拗音・促音っ
-  { text: 'クリーパーがちかづく', lv: 4 },
-  { text: 'エメラルドをみつけた', lv: 4 },
   { text: 'チェストにいれる', lv: 4 },
-  { text: 'レッドストーンでうごく', lv: 4 },
   { text: 'カボチャをそだてる', lv: 4 },
   { text: 'きょうはいいてんき', lv: 4 },
   { text: 'ケーキをつくろう', lv: 4 },
   { text: 'クッキーをたべよう', lv: 4 },
 ];
 
+// Stage5: 長文（ぶんしょうの上の段。10かな以上の「ながい」文だけを集めた難易度の高いステージ）。
+// SENTENCES から genuinely long な問題（10かな以上）を移し、tier ごとにやさしい lv1 も
+// 打てるよう同テーマ（採掘/建築/モブ/農/探検）の長文を書き足してある。lv は文字づかいの
+// 難しさ（1:清音中心 → 4:長音ー/拗音/促音っ）で、長さの軸とは独立。日本語なので区切りスペースは無し。
+export const LONG_SENTENCES = [
+  // lv1: ながいが清音中心（濁音はごく軽め）
+  { text: 'あさになるととりがなく', lv: 1 },
+  { text: 'つちをほりたねをうえる', lv: 1 },
+  { text: 'かわでさかなをつりたい', lv: 1 },
+  { text: 'よるはいえのなかにいる', lv: 1 },
+  // lv2: ながめ・濁音まじり
+  { text: 'つるはしでいしをたくさんほる', lv: 2 },
+  { text: 'はたけにたねをまいてそだてる', lv: 2 },
+  { text: 'にわとりがたまごをうんだ', lv: 2 },
+  { text: 'どうくつのおくふかくすすむ', lv: 2 },
+  // lv3: カタカナ語・濁音まじり
+  { text: 'スケルトンがあらわれた', lv: 3 },
+  { text: 'ゾンビとスケルトンがくる', lv: 3 },
+  { text: 'バケツでいけのみずをくむ', lv: 3 },
+  { text: 'ダイヤをみつけてほりだす', lv: 3 },
+  { text: 'サボテンにさわるといたい', lv: 3 },
+  // lv4: 長音ー・拗音・促音っ
+  { text: 'ようがんにきをつけて', lv: 4 },
+  { text: 'クリーパーがちかづく', lv: 4 },
+  { text: 'エメラルドをみつけた', lv: 4 },
+  { text: 'レッドストーンでうごく', lv: 4 },
+  { text: 'クリーパーがばくはつした', lv: 4 },
+  { text: 'エンダーマンがワープした', lv: 4 },
+  { text: 'チェストにたからをしまおう', lv: 4 },
+];
+
 // 段階 → 順序付き id プール（progress.introduce/pick が使う）。
-// WORD/SENTENCE は index を id にする（重複ターゲットがあっても安定）。
+// WORD/SENTENCE/LONG は index を id にする（重複ターゲットがあっても安定）。
 export const POOLS = {
   1: KEY_ORDER,
   2: KANA_ORDER,
   3: WORDS.map((_, i) => `w${i}`),
   4: SENTENCES.map((_, i) => `s${i}`),
+  5: LONG_SENTENCES.map((_, i) => `l${i}`),
 };
 
 export function wordById(id) { return WORDS[Number(String(id).slice(1))]; }
 export function sentenceById(id) { return SENTENCES[Number(String(id).slice(1))]; }
+export function longSentenceById(id) { return LONG_SENTENCES[Number(String(id).slice(1))]; }
 
-// id（'w12' / 's3'）→ lv（1..4）。Stage3/4 のラウンド難易度ミックスに使う。
-// 'w' は WORDS、's' は SENTENCES を引く。lv を持たない id は null。
+// id（'w12' / 's3' / 'l7'）→ lv（1..4）。Stage3/4/5 のラウンド難易度ミックスに使う。
+// 'w' は WORDS、's' は SENTENCES、'l' は LONG_SENTENCES を引く。lv を持たない id は null。
 export function lvOfId(id) {
   const s = String(id);
   if (s[0] === 'w') return WORDS[Number(s.slice(1))]?.lv ?? null;
   if (s[0] === 's') return SENTENCES[Number(s.slice(1))]?.lv ?? null;
+  if (s[0] === 'l') return LONG_SENTENCES[Number(s.slice(1))]?.lv ?? null;
   return null;
 }

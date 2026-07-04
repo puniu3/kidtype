@@ -4,7 +4,7 @@
 
 import { matcherFor } from './engine/matcher.js';
 import { toChunks } from './engine/romaji.js';
-import { POOLS, wordById, sentenceById, lvOfId } from './engine/content.js';
+import { POOLS, wordById, sentenceById, longSentenceById, lvOfId } from './engine/content.js';
 import { scoreRound } from './engine/score.js';
 import { pickRoundIds } from './engine/round.js';
 import { Scene } from './render/scene.js';
@@ -13,11 +13,12 @@ import sfx from './audio/sfx.js';
 import { initInstall } from './install.js';
 
 const FONT = 'ui-rounded, "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif';
-const STAGE_NAME = { 1: 'キー', 2: 'ローマじ', 3: 'たんご', 4: 'ぶんしょう' };
-const STAGE_SUB = { 1: 'キーを おぼえる', 2: 'ローマじで うつ', 3: 'たんごを うつ', 4: 'ぶんを うつ' };
-const STAGE_ICON = { 1: '🟨', 2: '🟩', 3: '🟦', 4: '🟪' };
+const STAGE_NAME = { 1: 'キー', 2: 'ローマじ', 3: 'たんご', 4: 'ぶんしょう', 5: 'ながいぶん' };
+const STAGE_SUB = { 1: 'キーを おぼえる', 2: 'ローマじで うつ', 3: 'たんごを うつ', 4: 'ぶんを うつ', 5: 'ながい ぶんを うつ' };
+const STAGE_ICON = { 1: '🟨', 2: '🟩', 3: '🟦', 4: '🟪', 5: '🟥' };
 // 集中力が続く程度の1ラウンド課題数（調整しやすいよう一箇所に）
-const ROUND_COUNT = { 1: 16, 2: 14, 3: 8, 4: 5 };
+// 長文(5)は 1 問が長いので少なめ。lv tier 数(4)以上にして毎ラウンド各 tier から出す。
+const ROUND_COUNT = { 1: 16, 2: 14, 3: 8, 4: 5, 5: 4 };
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -103,11 +104,11 @@ if (window.visualViewport) {
 // ---------- ラウンド構築 ----------
 // プール「全体」から毎ラウンド出題する（拡充コーパスの新語も実プレイに出るように）。
 // 抽選ロジックは純粋関数 pickRoundIds（src/engine/round.js）に切り出してテスト可能に。
-// lv 付きステージ（3/4）は易しめ寄りの難易度ミックスで選ぶ（lvOfId を渡す）。
+// lv 付きステージ（3/4/5）は易しめ寄りの難易度ミックスで選ぶ（lvOfId を渡す）。
 function buildRound(stage) {
   const pool = POOLS[stage];
   const count = ROUND_COUNT[stage];
-  const lvOf = (stage === 3 || stage === 4) ? lvOfId : null;
+  const lvOf = (stage === 3 || stage === 4 || stage === 5) ? lvOfId : null;
   return pickRoundIds(stage, { pool, lvOf, count, rng: Math.random });
 }
 
@@ -116,7 +117,8 @@ function buildItem(stage, id) {
   if (stage === 1) { target = id; kind = 'key'; }
   else if (stage === 2) { target = id; kind = 'kana'; }
   else if (stage === 3) { const w = wordById(id); target = w.kana; emoji = w.e; kind = 'word'; }
-  else { const s = sentenceById(id); target = s.text; kind = 'sentence'; }
+  else if (stage === 4) { const s = sentenceById(id); target = s.text; kind = 'sentence'; }
+  else { const s = longSentenceById(id); target = s.text; kind = 'sentence'; }
   const chunks = toChunks(target);
   return { stage, id, kind, emoji, chunks, matcher: matcherFor(target), done: false };
 }
@@ -185,7 +187,7 @@ function onKeyDown(e) {
   if (k === 'm' && e.shiftKey) { sfx.toggleMute(); return; }
 
   if (screen === 'title') {
-    if (k >= '1' && k <= '4') startRound(Number(k));
+    if (k >= '1' && k <= '5') startRound(Number(k));
     return;
   }
   if (screen === 'result') {
@@ -342,8 +344,8 @@ function drawTitle(c) {
   c.fillStyle = 'rgba(255,255,255,0.82)'; c.font = `700 ${Math.round(Math.min(20, W * 0.024))}px ${FONT}`;
   c.fillText(`いまの おうち：${scene.currentHouseName()}`, W / 2, ty + 28);
 
-  // 4枚のステージカード
-  const cols = 4, gap = Math.min(28, W * 0.025);
+  // 5枚のステージカード
+  const cols = 5, gap = Math.min(28, W * 0.025);
   const cw = Math.min(240, (W * 0.86 - gap * (cols - 1)) / cols);
   const ch = Math.min(cw * 1.15, H * 0.42);
   const totalW = cw * cols + gap * (cols - 1);
@@ -379,7 +381,7 @@ function drawTitle(c) {
     if (best.score === 0) { c.save(); c.globalAlpha = 0.25 * pulse; c.fillStyle = '#fff'; roundRect(c, x, y0, cw, ch * 0.9, 16); c.fill(); c.restore(); }
   }
   c.fillStyle = 'rgba(255,255,255,0.6)'; c.textAlign = 'center'; c.font = `700 16px ${FONT}`;
-  c.fillText('タップ、または 1〜4 のキー', W / 2, y0 + ch + 30);
+  c.fillText('タップ、または 1〜5 のキー', W / 2, y0 + ch + 30);
   muteBtn(c);
 }
 
