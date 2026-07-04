@@ -16,7 +16,6 @@ import { initInstall } from './install.js';
 
 const FONT = 'ui-rounded, "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif';
 const STAGE_NAME = { 1: 'キー', 2: 'ローマじ', 3: 'たんご', 4: 'ぶんしょう', 5: 'ながいぶん' };
-const STAGE_SUB = { 1: 'キーを おぼえる', 2: 'ローマじで うつ', 3: 'たんごを うつ', 4: 'ぶんを うつ', 5: 'ながい ぶんを うつ' };
 const STAGE_ICON = { 1: '🟨', 2: '🟩', 3: '🟦', 4: '🟪', 5: '🟥' };
 // 集中力が続く程度の1ラウンド課題数（調整しやすいよう一箇所に）
 // 長文(5)は 1 問が長いので少なめ。lv tier 数(4)以上にして毎ラウンド各 tier から出す。
@@ -300,21 +299,16 @@ function drawTitle(c) {
   c.textAlign = 'center'; c.textBaseline = 'middle';
   c.fillStyle = '#ffd34d'; c.font = `900 ${Math.round(Math.min(76, W * 0.09))}px ${FONT}`;
   c.fillText('キッドタイプ', W / 2, H * 0.16);
-  c.fillStyle = '#e8e2d6'; c.font = `700 ${Math.round(Math.min(26, W * 0.032))}px ${FONT}`;
-  c.fillText('すきな ステージを えらんでね', W / 2, H * 0.16 + 50);
 
-  // ためたスコア（長期プログレス）＋ いまのおうち。
-  const totalStr = String(total).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  const ty = H * 0.16 + 92;
-  c.fillStyle = '#ffe9a8'; c.font = `800 ${Math.round(Math.min(30, W * 0.036))}px ${FONT}`;
-  c.fillText(`💎 ためた スコア  ${totalStr}`, W / 2, ty);
+  // いまのおうち ＋ 家プログレスバー（長期プログレス。ためたスコアはバーの 💎 が表す）。
+  const ty = H * 0.16 + 56;
   c.fillStyle = 'rgba(255,255,255,0.82)'; c.font = `700 ${Math.round(Math.min(20, W * 0.024))}px ${FONT}`;
-  c.fillText(`いまの おうち：${scene.currentHouseName()}`, W / 2, ty + 28);
+  c.fillText(`いまの おうち：${scene.currentHouseName()}`, W / 2, ty);
 
   // 家プログレスバー（次のおうちマイルストーンまでの到達度）。
   houseBar.setTotal(total);
   const hbW = Math.min(420, W * 0.46), hbH = Math.max(16, Math.min(24, H * 0.028));
-  houseBar.draw(c, { x: W / 2 - hbW / 2, y: ty + 46, w: hbW, h: hbH, font: FONT });
+  houseBar.draw(c, { x: W / 2 - hbW / 2, y: ty + 24, w: hbW, h: hbH, font: FONT });
 
   // 5枚のステージカード
   const cols = 5, gap = Math.min(28, W * 0.025);
@@ -333,20 +327,18 @@ function drawTitle(c) {
       c.fillStyle = '#6fae46'; roundRect(c, bx, by, bw, bh * 0.9, 16); c.fill();
       c.textAlign = 'center'; c.textBaseline = 'middle';
       c.font = `${Math.round(bh * 0.26)}px ${FONT}`;
-      c.fillText(STAGE_ICON[stage], bx + bw / 2, by + bh * 0.26);
+      c.fillText(STAGE_ICON[stage], bx + bw / 2, by + bh * 0.3);
       c.fillStyle = '#fff';
       const nameStr = `${stage}. ${STAGE_NAME[stage]}`;
       let nf = Math.round(bh * 0.16);
       c.font = `900 ${nf}px ${FONT}`;
       while (c.measureText(nameStr).width > bw * 0.86 && nf > 8) { nf--; c.font = `900 ${nf}px ${FONT}`; }
-      c.fillText(nameStr, bx + bw / 2, by + bh * 0.52);
-      c.fillStyle = 'rgba(255,255,255,0.85)'; c.font = `700 ${Math.round(bh * 0.085)}px ${FONT}`;
-      c.fillText(STAGE_SUB[stage], bx + bw / 2, by + bh * 0.65);
+      c.fillText(nameStr, bx + bw / 2, by + bh * 0.54);
       // ベスト ★
-      stars(c, bx + bw / 2 - (bh * 0.13 * 3) / 2, by + bh * 0.81, bh * 0.13, best.stars, 4);
+      stars(c, bx + bw / 2 - (bh * 0.13 * 3) / 2, by + bh * 0.74, bh * 0.13, best.stars, 4);
       if (best.score > 0) {
         c.fillStyle = '#ffe9a8'; c.textAlign = 'center'; c.font = `700 ${Math.round(bh * 0.09)}px ${FONT}`;
-        c.fillText('ベスト ' + best.score, bx + bw / 2, by + bh * 0.93);
+        c.fillText('ベスト ' + best.score, bx + bw / 2, by + bh * 0.88);
       }
     });
     // ほんのり鼓動
