@@ -39,6 +39,25 @@ export function houseName(total) {
   return HOUSE_MILESTONES[houseLevelForTotal(total)].name;
 }
 
+// 1ラウンドあたりの家プログレスをハードキャップして「今回書き込む累計」を返す（純粋・DOM非依存）。
+// バグ: 1回の「ながいぶん」(~2200点) だと total 0→2200 が 500(たきび)・1200(こや) の
+// 二つのしきい値を一度に跨ぎ、家が さらち→こや と飛んで たきび の祝い（tierPop 1枠）が潰れる。
+// 対策: 1ラウンドで進める家は「今の tier T から T+1 まで、バーは T+2 のしきい値直前で頭打ち」に制限。
+// 天井を超えた分は恒久破棄する ── 貯めない・後で戻さない（carry-over しない。過去案は却下済み）。
+//   before の tier T = houseLevelForTotal(before)
+//   ceiling = T+2 があれば HOUSE_MILESTONES[T+2].total - 1（次の次の段の直前）、無ければ Infinity（頭打ちなし）
+//   after   = min(before + gain, ceiling)   … 溢れ (before+gain − after) は捨てる
+// 結果: before ≤ after で、T+2 が在るときは after < HOUSE_MILESTONES[T+2].total（=家は最大1段しか進まない）。
+//       gain が小さい／T+2 が無い（最上位付近）ときは after == before+gain（キャップは効かない＝今日と同じ挙動）。
+// 異常入力（NaN/負値）は 0 に丸める。
+export function hardCapTotal(beforeTotal, gain) {
+  const before = Math.max(0, Number.isFinite(beforeTotal) ? Math.floor(beforeTotal) : 0);
+  const g = Math.max(0, Number.isFinite(gain) ? Math.floor(gain) : 0);
+  const T = houseLevelForTotal(before);
+  const ceiling = T + 2 < HOUSE_MILESTONES.length ? HOUSE_MILESTONES[T + 2].total - 1 : Infinity;
+  return Math.min(before + g, ceiling);
+}
+
 // 家プログレスバー用: いまの tier 内で「次のマイルストーン」へどこまで届いたか。
 //   tier   … いまの tier（houseLevelForTotal と同じ値）
 //   frac   … 次のしきい値への到達割合 0..1（最上位 tier は常に 1＝満タン）
