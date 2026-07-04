@@ -33,7 +33,7 @@ const CSS = `
   position:fixed; left:0; right:0; bottom:0; z-index:9999;
   display:flex; justify-content:center;
   padding:10px 10px calc(10px + env(safe-area-inset-bottom,0px));
-  font-family: ui-rounded,"Hiragino Maru Gothic ProN","Hiragino Sans",system-ui,sans-serif;
+  font-family: "KidType Maru",ui-rounded,"Hiragino Maru Gothic ProN","Hiragino Sans",system-ui,sans-serif;
   pointer-events:none; /* バナー外はゲームのまま操作できる */
   animation:kt-ins-rise .28s cubic-bezier(.2,.9,.3,1) both;
 }
