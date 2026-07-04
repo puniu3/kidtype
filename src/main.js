@@ -10,6 +10,7 @@ import { pickRoundIds } from './engine/round.js';
 import { Scene } from './render/scene.js';
 import { Keyboard } from './render/keyboard.js';
 import { HouseBar } from './render/housebar.js';
+import { drawTarget } from './render/target.js';
 import sfx from './audio/sfx.js';
 import { initInstall } from './install.js';
 
@@ -226,21 +227,6 @@ function btn(c, id, x, y, w, h, action, drawFn) {
   buttons.push({ id, x, y, w, h, action });
   drawFn(x, y, w, h);
 }
-function tile(c, x, y, s, label, state) {
-  const colors = { todo: ['#9aa0aa', '#6f7480'], current: ['#ffd34d', '#d9a32e'], done: ['#74c34a', '#4f9130'] };
-  const [top, side] = colors[state] || colors.todo;
-  const d = Math.max(4, s * 0.1);
-  c.fillStyle = side; roundRect(c, x, y, s, s, 8); c.fill();
-  c.fillStyle = top; roundRect(c, x, y, s, s - d, 8); c.fill();
-  if (state === 'current') {
-    c.save(); c.shadowColor = '#ffe27a'; c.shadowBlur = 22;
-    c.lineWidth = 3; c.strokeStyle = '#fff3b0'; roundRect(c, x + 1.5, y + 1.5, s - 3, s - d - 3, 7); c.stroke(); c.restore();
-  }
-  c.fillStyle = state === 'current' ? '#3a2c00' : '#23282f';
-  c.font = `800 ${Math.round(s * (label.length > 1 ? 0.42 : 0.58))}px ${FONT}`;
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillText(label, x + s / 2, y + (s - d) / 2);
-}
 function stars(c, x, y, size, n, gap = 6) {
   c.textAlign = 'left'; c.textBaseline = 'middle';
   c.font = `${size}px ${FONT}`;
@@ -257,31 +243,6 @@ function muteBtn(c) {
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `${Math.round(h * 0.5)}px ${FONT}`;
     c.fillText(sfx.muted ? '🔇' : '🔊', x + w / 2, y + h / 2 + 1);
   });
-}
-
-// ---------- ターゲット（タイルのみ・ラベル無し）----------
-function drawTarget(c, Wr, Hr, item) {
-  const visible = item.chunks.map((ch, i) => ({ ch, i }));
-  const n = visible.filter((v) => !v.ch.auto).length;
-  const s = item.stage <= 2 ? Math.min(Wr * 0.2, Hr * 0.34)
-    : Math.max(28, Math.min(Wr * 0.74 / Math.max(1, n) - 8, Hr * 0.26));
-  const gap = s * 0.16, spaceGap = s * 0.5;
-  let totalW = 0; for (const v of visible) totalW += v.ch.auto ? spaceGap : s + gap; totalW -= gap;
-  let x = Wr / 2 - totalW / 2;
-  const y = Hr * 0.16;
-  const cur = item.matcher.currentChunkIndex();
-  let fx = Wr / 2, fy = y + s / 2;
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  if (item.emoji) { c.font = `${Math.round(s * 0.9)}px ${FONT}`; c.fillText(item.emoji, x - s * 0.6, y + s / 2); }
-  for (const v of visible) {
-    if (v.ch.auto) { x += spaceGap; continue; }
-    const state = v.i < cur ? 'done' : v.i === cur ? 'current' : 'todo';
-    const label = item.kind === 'key' ? v.ch.text.toUpperCase() : v.ch.text;
-    tile(c, x, y, s, label, state);
-    if (v.i === cur) { fx = x + s / 2; fy = y + s / 2; }
-    x += s + gap;
-  }
-  scene.setFocus(fx, fy);
 }
 
 // ---------- 画面: プレイ ----------
@@ -314,7 +275,9 @@ function drawPlayHud(c) {
 function drawPlay(c) {
   c.save(); c.translate(layout.world.x, layout.world.y);
   scene.draw(c);
-  if (current) drawTarget(c, layout.world.w, layout.world.h, current);
+  // drawTarget はステージ内で固定のタイル辺長で描く（長文は 2 行折り返し。render/target.js）。
+  // 返り値 = 現在タイルの中心。キャラのピッケル狙い先（focus）をそこへ向ける。
+  if (current) { const f = drawTarget(c, layout.world.w, layout.world.h, current); scene.setFocus(f.x, f.y); }
   c.restore();
   const pulse = (Math.sin(nowT * 4) + 1) / 2;
   const fresh = (m) => m && nowT - m.t < 0.18;
