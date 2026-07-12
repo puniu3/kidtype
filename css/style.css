@@ -1,0 +1,35 @@
+/* style.css — フルスクリーンの canvas ゲーム。タッチ衛生（iOS Safari 対策）を重視。 */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  /* canvas は毎フレーム透明クリアされるので、未描画部分はこの色が透ける。
+     PWA 全画面で余るのは「地面の下」なので、フォールバックは空色ではなく土色にする
+     （空は上端。空色だと地面の下に水色がのぞいて不自然に見える）。 */
+  background: #7a5230;
+  /* タッチ操作の余計な挙動を全部止める */
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /* iOS のタップ時グレーフラッシュを消す（押下フィードバックは自前で出す） */
+  -webkit-tap-highlight-color: transparent;
+  /* 先頭は埋め込みフォント（src/font.js が FontFace API で登録する）。未ロード時は後続へ。 */
+  font-family: "KidType Maru", ui-rounded, "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif;
+}
+
+#game {
+  display: block;
+  /* JS が実ピクセルで上書きするが、その間隙の保険として dvh/dvw を使う。
+     dvh は動的ビューポート＝PWA スタンドアロンの可視領域を追従するので、
+     canvas の表示ボックスが下端の余白を残さない（100vh だと取りこぼすことがある）。 */
+  width: 100vw; height: 100vh;
+  width: 100dvw; height: 100dvh;
+  /* iPad の外付けキーボード前提なので拡大ジェスチャ無効化を補強 */
+  touch-action: none;
+}
+
+/* 念のため：iOS のダブルタップズーム等を抑制 */
+canvas { -webkit-user-select: none; user-select: none; }
