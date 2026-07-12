@@ -10,6 +10,28 @@ import { houseLevelForTotal, HOUSE_MILESTONES } from '../engine/milestones.js';
 
 const SKY_TOP = '#69b7ff', SKY_BOT = '#bfeaff';
 
+// 空に流れるブロック雲の固定テーブル（決定的 — 毎フレーム乱数は使わない）。
+// shape: '#' がブロック。底が平らで上に段差のあるクラスタ（Minecraft の雲の流儀）。
+// fx=初期位置(周期に対する割合) / fy=高さ(H比) / spd=速度(W比/秒。雲ごとに少し違える) / sc=大きさ。
+const CLOUDS = [
+  { fx: 0.10, fy: 0.045, spd: 0.009, sc: 1.15, shape: [
+    '    #####     ',
+    '  #########   ',
+    ' ############ ',
+    '##############',
+  ] },
+  { fx: 0.52, fy: 0.150, spd: 0.014, sc: 0.85, shape: [
+    '  ####  ',
+    ' ###### ',
+    '########',
+  ] },
+  { fx: 0.80, fy: 0.095, spd: 0.006, sc: 1.0, shape: [
+    '  ###    ## ',
+    ' ######  ###',
+    '############',
+  ] },
+];
+
 export class Scene {
   constructor() {
     this.w = 0; this.h = 0; this.t = 0;
@@ -133,6 +155,9 @@ export class Scene {
     ctx.fillStyle = 'rgba(255,241,168,0.35)'; ctx.fillRect(W * 0.86 - 8, H * 0.12 - 8, 62, 62);
     ctx.fillStyle = '#fff1a8'; ctx.fillRect(W * 0.86, H * 0.12, 46, 46);
 
+    // 雲（太陽の手前・丘の奥をゆっくり流れる。Minecraft では雲は太陽の手前）
+    this._drawClouds(ctx);
+
     // 遠景の丘
     ctx.fillStyle = '#4f8f6a';
     for (let i = 0; i < 14; i++) {
@@ -192,6 +217,34 @@ export class Scene {
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  // ===== 空の雲（ブロック調・背景装飾）================================
+  // CLOUDS の固定テーブルを this.t 駆動でゆっくり右へ流す。右端を出たら左から
+  // 入り直す（wrap around）。控えめな半透明の白 — ターゲットタイルや家の
+  // 視認性を落とさないよう、淡く・ゆっくり・少数に留める。
+  _drawClouds(ctx) {
+    const W = this.w, H = this.h;
+    const cell = Math.max(3, Math.round(H * 0.014));            // ブロック1個（整数でくっきり・継ぎ目なし）
+    for (const c of CLOUDS) {
+      const s = Math.max(2, Math.round(cell * c.sc));
+      const cw = c.shape[0].length * s;                          // 雲の幅
+      const span = W + cw;                                       // wrap 周期（画面幅＋自分の幅）
+      const x = Math.round(((c.fx * span + this.t * c.spd * W) % span) - cw);
+      const y = Math.round(H * c.fy);
+      const last = c.shape.length - 1;
+      for (let r = 0; r <= last; r++) {
+        const row = c.shape[r];
+        // 底の行だけほんのり青灰に（Minecraft の雲の底の影）
+        ctx.fillStyle = r === last ? 'rgba(214,235,248,0.60)' : 'rgba(255,255,255,0.65)';
+        let run = -1;                                            // '#' の連続区間ごとに1矩形で描く
+        for (let i = 0; i <= row.length; i++) {
+          const on = i < row.length && row[i] === '#';
+          if (on && run < 0) run = i;
+          else if (!on && run >= 0) { ctx.fillRect(x + run * s, y + r * s, (i - run) * s, s); run = -1; }
+        }
+      }
+    }
   }
 
   // ===== 育つ すまい（更地 → 集落 → 城）=============================
