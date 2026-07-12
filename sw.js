@@ -28,6 +28,7 @@ const SHELL = [
   './src/render/target.js',
   './src/render/housebar.js',
   './src/audio/sfx.js',
+  './src/audio/bgm.js',
   './assets/fonts/MPLUSRounded1c-ExtraBold.kana.woff2',
   './assets/icons/icon-180.png',
   './assets/icons/icon-192.png',

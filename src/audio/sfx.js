@@ -44,6 +44,15 @@ function ensure() {
   return ctx;
 }
 
+// bgm.js が同じ AudioContext / リミッタ経路（master → compressor）へ相乗りするための最小 export。
+// ensure() を含むので、必ずユーザー操作後（unlock 以降）に呼ぶこと（autoplay 制約）。
+// 共有により「ミュート = ctx.suspend()」が SFX/BGM を同時に止める既存仕様がそのまま保たれる。
+export function sharedBus() { ensure(); return { ctx, master }; }
+
+// unlock() への相乗りフック（bgm の遅延開始用）。unlock のたびに呼ばれるので登録側は冪等に。
+const unlockHooks = [];
+export function onUnlock(fn) { unlockHooks.push(fn); }
+
 function now() { return ctx.currentTime; }
 
 // 単音
@@ -87,6 +96,7 @@ const sfx = {
     // 無音バッファ（iOS unlock）
     const b = ctx.createBuffer(1, 1, ctx.sampleRate);
     const s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0);
+    for (const fn of unlockHooks) { try { fn(); } catch (_) {} }
   },
   // 正しいキー：ピックアックスの「ティン」。連続で少しずつ音程上昇。
   mine(streak = 0) {
