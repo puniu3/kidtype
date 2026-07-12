@@ -380,7 +380,7 @@ export const LONG_SENTENCES = [
   { text: 'ジュースをのんでちょっとやすむ', lv: 4 },
 ];
 
-// 段階 → 順序付き id プール（progress.introduce/pick が使う）。
+// 段階 → 順序付き id プール（round.pickRoundIds のラウンド抽選が使う）。
 // WORD/SENTENCE/LONG は index を id にする（重複ターゲットがあっても安定）。
 export const POOLS = {
   1: KEY_ORDER,

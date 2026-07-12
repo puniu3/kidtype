@@ -1,7 +1,6 @@
 // run.mjs — エンジンのテスト（node test/run.mjs）。依存なし・自前ランナー。
 import { toChunks, canonicalRomaji, kanaToRomaji } from '../src/engine/romaji.js';
 import { Matcher, matcherFor } from '../src/engine/matcher.js';
-import { Progress, Stage } from '../src/engine/progress.js';
 import { kataToHira } from '../src/engine/kana.js';
 import { WORDS, SENTENCES, LONG_SENTENCES, POOLS, lvOfId } from '../src/engine/content.js';
 import { pickRoundIds } from '../src/engine/round.js';
@@ -250,111 +249,14 @@ accepts('ブロックを ほる', 'burokkuwohoru');
   m.press('o'); ok(m.isDone(), 'ねこ done');
 }
 
-// ---- progress.js: confident → 段階解禁 ----
-{
-  const p = new Progress('test-' + pass); // ユニークキー
-  p.reset();
-  // Stage2 のかなを3つ解禁
-  const a = p.introduce(2, ['あ', 'い', 'う']);
-  eq(a, 'あ', 'introduce first = あ');
-  // あ を WINDOW 回、速く正解 → mastered
-  let mastered = false;
-  for (let i = 0; i < 6; i++) mastered = p.record(Stage.KANA, 'あ', true, 800, 1);
-  ok(mastered, 'あ mastered after 6 fast correct');
-  ok(!p._item('い').mastered, 'い not yet mastered');
-  // 遅いと master しない
-  for (let i = 0; i < 6; i++) p.record(Stage.KANA, 'い', true, 9000, 1);
-  ok(!p._item('い').mastered, 'too slow → not mastered');
-  // 苦手が2つ以下になったら次を投入してよい
-  for (let i = 0; i < 6; i++) p.record(Stage.KANA, 'い', true, 800, 1);
-  ok(p._item('い').mastered, 'い mastered after fast');
-}
-{
-  const p = new Progress('test-stage-' + pass);
-  p.reset();
-  const pool = ['あ', 'い'];
-  p.introduce(2, pool); p.introduce(2, pool);
-  for (const id of pool) for (let i = 0; i < 6; i++) p.record(Stage.KANA, id, true, 700, 1);
-  ok(p.stageCleared(2, pool), 'stage2 cleared when pool mastered');
-  ok(p.unlockNext(2), 'unlockNext returns true first time');
-  ok(!p.unlockNext(2), 'unlockNext idempotent');
-  eq(p.data.unlocked, Stage.WORD, 'unlocked advanced to WORD');
-}
-// 長文(LONG=5)が新しい最上段: ぶんしょう(4)クリアで LONG を解禁し、LONG より上は無い。
-{
-  const p = new Progress('test-longstage-' + pass);
-  p.reset();
-  ok(p.unlockNext(Stage.SENTENCE), 'clearing ぶんしょう unlocks LONG (stage 5)');
-  eq(p.data.unlocked, Stage.LONG, 'unlocked advanced to LONG');
-  ok(!p.unlockNext(Stage.LONG), 'LONG is terminal: no stage above it');
-}
-// pick: 新規を優先（固定rng）
-{
-  const p = new Progress('test-pick-' + pass);
-  p.reset();
-  const pp = ['あ', 'い', 'う'];
-  p.introduce(2, pp); p.introduce(2, pp); p.introduce(2, pp); // 3つとも解禁
-  // あ を master 済みに、い/う は新規 → rng=0.99 でも新規寄りに重みづけ
-  for (let i = 0; i < 6; i++) p.record(Stage.KANA, 'あ', true, 700, 1);
-  const picks = new Set();
-  for (let i = 0; i < 20; i++) picks.add(p.pick(2, () => (i % 17) / 17));
-  ok(picks.has('い') || picks.has('う'), 'pick surfaces new items');
-}
-
 // ================= 監査(workflow)で見つかった不具合の回帰テスト =================
-
-// [HIGH] 速度ゲート反転の修正: ~1600ms/かな の子が単語(stage3)を master できる
-{
-  const p = new Progress('test-speedgate-' + pass);
-  p.reset();
-  let mastered = false;
-  for (let i = 0; i < 6; i++) mastered = p.record(Stage.WORD, 'w0', true, 1600 * 3, 3); // 1600ms/かな
-  ok(mastered, 'stage3 word masterable at 1600ms/kana (speed gate not inverted)');
-}
-// 段階解禁は正確さベース（遅くても正確なら閉じ込めない）
-{
-  const p = new Progress('test-competent-' + pass);
-  p.reset();
-  for (let i = 0; i < 6; i++) p.record(Stage.WORD, 'w0', true, 9000 * 3, 3); // 遅いが正確
-  ok(!p._item('w0').mastered, 'slow → not mastered (mastery needs speed)');
-  ok(p.stageCleared(3, ['w0']), 'slow-but-accurate still clears stage (no dead-end)');
-}
-
-// [MEDIUM] 行き詰まり項目は新規投入をブロックしない
-{
-  const p = new Progress('test-stuck-' + pass);
-  p.reset();
-  const pool = ['あ', 'い', 'う'];
-  for (let k = 0; k < 3; k++) p.introduce(2, pool);
-  // 全部 seen を少しだけ(未習得) → ブロッキング → 投入しない
-  for (const id of pool) for (let i = 0; i < 2; i++) p.record(Stage.KANA, id, false, 5000, 1);
-  ok(!p.shouldIntroduceMore(2), 'unmastered & not-stuck blocks new intro');
-  // さらに出題して行き詰まり(seen>=8) → ブロッキングから外れ、投入OK
-  for (const id of pool) for (let i = 0; i < 8; i++) p.record(Stage.KANA, id, false, 5000, 1);
-  ok(p.shouldIntroduceMore(2), 'stuck items no longer block (escape from 3-item lock)');
-}
+// （progress.js の適応進行はゲーム本体から外れたため、モジュールごとテストも削除済み）
 
 // [LOW] ん + 表示スペース越しの母音: 単独 n は不可、nn を要求
 accepts('ほん あ', 'honna');   // ん=nn を強制
 rejects('ほん あ', 'hona');    // 単独 n は あ と紛れるので不可
 accepts('ぱん や', 'pannya');  // 次が や行でも nn 強制
 rejects('ぱん や', 'panya');
-
-// [LOW] 壊れた/旧保存データでも落ちない
-{
-  const prof = 'test-corrupt-' + pass;
-  const p1 = new Progress(prof);
-  // 旧式: introduced に一部キーしか無い・item が空オブジェクト
-  p1.data = { stage: 3, unlocked: 3, items: { w0: {} }, introduced: { 2: ['あ'] } };
-  p1.save();
-  let threw = false;
-  try {
-    const p2 = new Progress(prof);
-    ok(Array.isArray(p2.data.introduced[1]) && Array.isArray(p2.data.introduced[4]), 'introduced normalized to all stages');
-    p2.introduce(3, ['w1']); p2.pick(3, () => 0.5); p2.record(3, 'w0', true, 1000, 1); // 壊れた item でも動く
-  } catch (_) { threw = true; }
-  ok(!threw, 'corrupt/old save data does not crash');
-}
 
 // 表示メタ(text/ci0/ci1): カタカナ原文を保持、全文字を被覆
 {
@@ -364,16 +266,6 @@ rejects('ぱん や', 'panya');
   }
   const block = toChunks('ブロック');
   eq(block[0].text, 'ブ', 'first tile keeps original katakana ブ');
-}
-
-// 直前と同じ項目を避ける（同じキー連続の防止）
-{
-  const p = new Progress('test-avoid-' + pass);
-  p.reset();
-  const pp = ['あ', 'い']; p.introduce(2, pp); p.introduce(2, pp);
-  for (let i = 0; i < 10; i++) ok(p.pick(2, () => 0.5, 'あ') === 'い', 'pick avoids previous id');
-  const p2 = new Progress('test-avoid2-' + pass); p2.reset(); p2.introduce(2, ['あ']);
-  ok(p2.pick(2, () => 0.5, 'あ') === 'あ', 'avoid ignored when single candidate');
 }
 
 // ---- audio: バックグラウンド復帰の自動レジューム（sfx.js） ----

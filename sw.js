@@ -3,21 +3,34 @@
 // LAN の http://192.168.x.x:8000 では登録されない（main.js が graceful にスキップ）。
 // 本番(HTTPS デプロイ)で初めてオフライン化が有効になる。
 
-const CACHE = 'kidtype-v1';
+// CACHE 名と SHELL は開発用の既定値。デプロイでは build.mjs が実ファイル一覧＋内容ハッシュで
+// 両方を自動生成・上書きする（ここを手で網羅し続ける必要はないが、localhost の SW 検証が
+// 中途半端にならないよう実態に合わせておく）。
+const CACHE = 'kidtype-v2';
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
   './css/style.css',
   './src/main.js',
+  './src/font.js',
+  './src/install.js',
   './src/engine/kana.js',
   './src/engine/romaji.js',
   './src/engine/matcher.js',
-  './src/engine/progress.js',
   './src/engine/content.js',
+  './src/engine/score.js',
+  './src/engine/round.js',
+  './src/engine/milestones.js',
+  './src/engine/tilelayout.js',
   './src/render/scene.js',
   './src/render/keyboard.js',
+  './src/render/target.js',
+  './src/render/housebar.js',
   './src/audio/sfx.js',
+  './assets/fonts/MPLUSRounded1c-ExtraBold.kana.woff2',
+  './assets/icons/icon-180.png',
+  './assets/icons/icon-192.png',
 ];
 
 self.addEventListener('install', (e) => {
