@@ -13,6 +13,7 @@ import { HouseBar } from './render/housebar.js';
 import { drawTarget } from './render/target.js';
 import { hardCapTotal } from './engine/milestones.js';
 import sfx from './audio/sfx.js';
+import bgm from './audio/bgm.js'; // BGM ループ。sfx.unlock() 相乗りで自動開始（import だけで結線される）
 import { initInstall } from './install.js';
 import { FONT, loadGameFont } from './font.js';
 const STAGE_NAME = { 1: 'キー', 2: 'ローマじ', 3: 'たんご', 4: 'ぶんしょう', 5: 'ながいぶん' };
@@ -446,6 +447,8 @@ function frame(t) {
   const dt = Math.min(0.05, last ? (nowT - last) : 0); last = nowT;
   scene.update(dt);
   houseBar.update(dt);
+  // BGM: プレイ中はフル編成、タイトル/結果は pad 中心に薄く。同値なら即 return の軽い呼び出し。
+  bgm.setScene(screen === 'play' ? 'play' : 'calm');
   // ボタン押下フィードバック（0.12s）を見せ終えたらアクション実行（画面切替は描画前に反映）。
   if (pendingAction && nowT >= pendingAction.at) {
     const fn = pendingAction.fn; pendingAction = null;
