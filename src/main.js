@@ -38,15 +38,25 @@ let streak = 0;
 let nowT = 0;
 let lastPressed = null, lastWrong = null;
 let buttons = [];                // 当たり判定用（毎フレーム再構築）
+let pressedBtn = null;           // タップ押下中のボタン（沈み表示用）{ id, t }
+let pendingAction = null;        // 押下フィードバックを見せてから実行するアクション { fn, at }
 
 // ---------- ベストスコア ----------
+// タイトル画面は毎フレーム全ステージのベストを参照するので、localStorage は初回だけ読んで
+// 以後メモリキャッシュを返す（書き込みはキャッシュと両方更新）。
+const bestCache = new Map();
 function loadBest(stage) {
-  try { return JSON.parse(localStorage.getItem('kidtype:best:' + stage)) || { score: 0, stars: 0 }; }
-  catch (_) { return { score: 0, stars: 0 }; }
+  if (bestCache.has(stage)) return bestCache.get(stage);
+  let b;
+  try { b = JSON.parse(localStorage.getItem('kidtype:best:' + stage)) || { score: 0, stars: 0 }; }
+  catch (_) { b = { score: 0, stars: 0 }; }
+  bestCache.set(stage, b);
+  return b;
 }
 function saveBest(stage, score, stars) {
   const b = loadBest(stage);
   const nb = { score: Math.max(b.score, score), stars: Math.max(b.stars, stars) };
+  bestCache.set(stage, nb);
   try { localStorage.setItem('kidtype:best:' + stage, JSON.stringify(nb)); } catch (_) {}
   return score > b.score;
 }
@@ -54,14 +64,18 @@ function saveBest(stage, score, stars) {
 // ---------- 累計スコア（長期プログレス：背景の家を育てる）----------
 // 全プレイを通した「ためたスコア」。ラウンドごとに加算して保存し、
 // タイトル画面で表示＋背景の家(村)の進化に使う。
+let totalCache = null;           // 毎フレーム参照されるのでメモリキャッシュ（loadBest と同じ理由）
 function loadTotal() {
-  try { return Math.max(0, parseInt(localStorage.getItem('kidtype:total'), 10) || 0); }
-  catch (_) { return 0; }
+  if (totalCache != null) return totalCache;
+  try { totalCache = Math.max(0, parseInt(localStorage.getItem('kidtype:total'), 10) || 0); }
+  catch (_) { totalCache = 0; }
+  return totalCache;
 }
 // 今回のラウンドで確定した累計スコアを保存する（引数はそのまま書き込む確定値）。
 // 1ラウンドあたりの加算上限（家プログレスのハードキャップ）は呼び出し側で hardCapTotal が算出する。
 function saveTotal(n) {
   const v = Math.max(0, Number.isFinite(n) ? Math.floor(n) : 0);
+  totalCache = v;
   try { localStorage.setItem('kidtype:total', String(v)); } catch (_) {}
   return v;
 }
@@ -182,17 +196,19 @@ function completeItem() {
 }
 
 function onKeyDown(e) {
+  // 長押しオートリピートは無視（子どもはキーを押しっぱなしにする。2打目以降が誤打の嵐になる）。
+  if (e.repeat) return;
   // 開発者用裏口（隠しコマンド）: Ctrl+Shift+R で累計進捗(育つ家)をリセット。画面表示なし。
   if (e.ctrlKey && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
     e.preventDefault();
     try { localStorage.removeItem('kidtype:total'); } catch (_) {}
+    totalCache = 0;
     scene.setTotal(0); // タイトル背景の家を即さらちへ
     return;
   }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key;
   if (['Tab', 'Backspace', ' '].includes(k)) e.preventDefault();
-  if (k === 'm' && e.shiftKey) { sfx.toggleMute(); return; }
 
   if (screen === 'title') {
     if (k >= '1' && k <= '5') startRound(Number(k));
@@ -215,8 +231,16 @@ window.addEventListener('keydown', onKeyDown);
 function canvasPoint(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
 function hit(b, p) { return p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h; }
 function onPointer(e) {
+  if (pendingAction) return;                       // 押下フィードバック中の二度押しは無視
   const p = canvasPoint(e);
-  for (const b of buttons) if (hit(b, p)) { b.action(); return; }
+  for (const b of buttons) {
+    if (!hit(b, p)) continue;
+    // 沈み + クリック音を一瞬見せてから実行（即実行だと画面が切り替わって押した感が出ない）。
+    sfx.unlock(); sfx.click();
+    pressedBtn = { id: b.id, t: nowT };
+    pendingAction = { fn: b.action, at: nowT + 0.12 };
+    return;
+  }
 }
 canvas.addEventListener('pointerdown', onPointer);
 
@@ -228,7 +252,10 @@ function roundRect(c, x, y, w, h, r) {
 }
 function btn(c, id, x, y, w, h, action, drawFn) {
   buttons.push({ id, x, y, w, h, action });
-  drawFn(x, y, w, h);
+  // 押下中は全体を数 px 沈めて「押した」を見せる。
+  const sunk = pressedBtn && pressedBtn.id === id && nowT - pressedBtn.t < 0.15;
+  if (sunk) { c.save(); c.translate(0, 3); drawFn(x, y, w, h); c.restore(); }
+  else drawFn(x, y, w, h);
 }
 function stars(c, x, y, size, n, gap = 6) {
   c.textAlign = 'left'; c.textBaseline = 'middle';
@@ -355,8 +382,10 @@ function drawTitle(c) {
 
 // ---------- 画面: 結果 ----------
 function drawResult(c) {
-  c.save(); c.translate(layout.world.x, layout.world.y); scene.draw(c); c.restore();
+  // 世界は dim オーバーレイの下、紙吹雪(celebrate)はオーバーレイの上 — お祝いをくすませない。
+  c.save(); c.translate(layout.world.x, layout.world.y); scene.draw(c, { particles: false }); c.restore();
   c.fillStyle = 'rgba(20,16,12,0.55)'; c.fillRect(0, 0, W, H);
+  c.save(); c.translate(layout.world.x, layout.world.y); scene.drawParticles(c); c.restore();
   const cx = W / 2;
   c.textAlign = 'center'; c.textBaseline = 'middle';
   c.fillStyle = '#ffd34d'; c.font = `900 ${Math.round(Math.min(72, W * 0.085))}px ${FONT}`;
@@ -417,6 +446,11 @@ function frame(t) {
   const dt = Math.min(0.05, last ? (nowT - last) : 0); last = nowT;
   scene.update(dt);
   houseBar.update(dt);
+  // ボタン押下フィードバック（0.12s）を見せ終えたらアクション実行（画面切替は描画前に反映）。
+  if (pendingAction && nowT >= pendingAction.at) {
+    const fn = pendingAction.fn; pendingAction = null;
+    fn();
+  }
   if (screen === 'play' && current && current.done && nowT >= nextAt) {
     if (round.index >= round.queue.length) finishRound(); else nextRoundItem();
   }

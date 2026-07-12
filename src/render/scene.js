@@ -118,7 +118,7 @@ export class Scene {
     if (this.gleam) { this.gleam.t += dt; this.gleam.life -= dt; if (this.gleam.life <= 0) this.gleam = null; }
   }
 
-  draw(ctx) {
+  draw(ctx, { particles = true } = {}) {
     const W = this.w, H = this.h;
     const groundY = H * 0.74;            // 地面を下段に
     ctx.save();
@@ -168,6 +168,17 @@ export class Scene {
       ctx.fillStyle = grd; ctx.fillRect(gm.x - gr, gm.y - gr, gr * 2, gr * 2);
     }
 
+    if (particles) this.drawParticles(ctx);
+
+    if (this.diamond) this._drawDiamond(ctx, this.diamond);
+
+    if (this.flash > 0) { ctx.fillStyle = `rgba(200,50,50,${this.flash * 0.16})`; ctx.fillRect(-20, -20, W + 40, H + 40); }
+    ctx.restore();
+  }
+
+  // パーティクルだけを描く。結果画面は dim オーバーレイの下に世界（particles:false の draw）、
+  // 上にこれを重ねる — お祝いの紙吹雪がオーバーレイにくすまないように。
+  drawParticles(ctx) {
     for (const p of this.particles) {
       if (p.kind === 'spark') {                                // 十字に光るきらめき
         const tw = 0.5 + 0.5 * Math.sin(this.t * 12 + p.tw);
@@ -181,11 +192,6 @@ export class Scene {
       }
     }
     ctx.globalAlpha = 1;
-
-    if (this.diamond) this._drawDiamond(ctx, this.diamond);
-
-    if (this.flash > 0) { ctx.fillStyle = `rgba(200,50,50,${this.flash * 0.16})`; ctx.fillRect(-20, -20, W + 40, H + 40); }
-    ctx.restore();
   }
 
   // ===== 育つ すまい（更地 → 集落 → 城）=============================
