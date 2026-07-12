@@ -118,6 +118,15 @@ const sfx = {
     [392, 523, 659, 784, 1047, 1319].forEach((f, i) => tone({ type: 'square', freq: f, dur: 0.18, gain: 0.16, when: i * 0.09 }));
     noise({ dur: 0.3, gain: 0.15, filt: 3000, when: 0.1 });
   },
+  // 結果画面の★リビール用チャイム。i(0..2) が増えるほど音程が上がる短く明るいベル。
+  // levelup の triangle アルペジオと音色がかぶらないよう、sine 基音＋高倍音のきらめきにする。
+  star(i = 0) {
+    ensure();
+    const notes = [880, 1108.7, 1318.5];          // A5 → C#6 → E6
+    const f = notes[Math.min(i, notes.length - 1)];
+    tone({ type: 'sine', freq: f, dur: 0.22, gain: 0.20, attack: 0.004 });
+    tone({ type: 'triangle', freq: f * 2, dur: 0.14, gain: 0.06, when: 0.004 }); // 倍音のきらめき
+  },
   click() { ensure(); tone({ type: 'square', freq: 440, dur: 0.06, gain: 0.16, slideTo: 620 }); },
 
   get muted() { return muted; },

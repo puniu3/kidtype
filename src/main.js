@@ -21,6 +21,13 @@ const STAGE_ICON = { 1: '🟨', 2: '🟩', 3: '🟦', 4: '🟪', 5: '🟥' };
 // 長文(5)は 1 問が長いので少なめ。lv tier 数(4)以上にして毎ラウンド各 tier から出す。
 const ROUND_COUNT = { 1: 16, 2: 14, 3: 8, 4: 5, 5: 4 };
 
+// 結果画面の★順次リビール演出のタイミング（秒。resultAt からの相対）。
+//  - STAR_D0: 1個目の遅延。finishRound で鳴る levelup/stageup ジングル(~0.6s)と喧嘩させないため。
+//  - STAR_DI: ★どうしの間隔。獲得★は 0.65 / 0.95 / 1.25s に出て、3個とも 1.5s 以内に出揃う。
+//  - STAR_POP: ポップイン時間（scale 1.4→1.0 ease-out）。
+//  - STAR_DIM: 未獲得★を「リビール完了後にふわっと」出すフェード時間。
+const STAR_D0 = 0.65, STAR_DI = 0.30, STAR_POP = 0.24, STAR_DIM = 0.40;
+
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const scene = new Scene();
@@ -36,6 +43,7 @@ let result = null;               // 結果画面データ
 let nextAt = 0;
 let streak = 0;
 let nowT = 0;
+let resultAt = 0;                // 結果画面に入った時刻（★リビールの基準。frame の nowT で更新される秒）
 let lastPressed = null, lastWrong = null;
 let buttons = [];                // 当たり判定用（毎フレーム再構築）
 let pressedBtn = null;           // タップ押下中のボタン（沈み表示用）{ id, t }
@@ -166,7 +174,9 @@ function finishRound() {
   scene.setTotal(afterTotal);
   // 家プログレスバーへ「今回の得点が注ぎ込まれる」演出を開始（バーは before から after へ伸びる）。
   houseBar.startPour(beforeTotal, afterTotal);
-  result = { stage: round.stage, timeMs, accuracy, score, stars, isNewBest, best: loadBest(round.stage), houseLeveledUp };
+  // starChimed: 獲得★リビール時にチャイムを1個1回だけ鳴らすためのフラグ（result 再生成で自然にリセット）。
+  result = { stage: round.stage, timeMs, accuracy, score, stars, isNewBest, best: loadBest(round.stage), houseLeveledUp, starChimed: [false, false, false] };
+  resultAt = nowT;               // ★リビールはこの時刻からの相対で進む
   screen = 'result';
   if (stars >= 3 || houseLeveledUp) sfx.stageup(); else sfx.levelup();
   scene.celebrate();
@@ -257,12 +267,46 @@ function btn(c, id, x, y, w, h, action, drawFn) {
   if (sunk) { c.save(); c.translate(0, 3); drawFn(x, y, w, h); c.restore(); }
   else drawFn(x, y, w, h);
 }
-function stars(c, x, y, size, n, gap = 6) {
-  c.textAlign = 'left'; c.textBaseline = 'middle';
+// ★×3 を描く。共有関数（タイトルのステージカードでも使用 → 従来どおり即時表示）。
+// reveal を渡すと結果画面専用の順次リビールになる: reveal = { t } は resultAt からの経過秒。
+//   - 獲得★(i<n): t が STAR_D0 + i*STAR_DI を越えた時点で scale 1.4→1.0(ease-out) にポップイン。
+//   - 未獲得★(i>=n): 全獲得★のリビール後（STAR_D0 + n*STAR_DI）に alpha 0→0.25 でふわっと出す。
+// 音（sfx.star）は描画から切り離し、呼び出し側 drawResult でタイミング判定して鳴らす。
+function stars(c, x, y, size, n, gap = 6, reveal = null) {
+  c.textBaseline = 'middle';
   c.font = `${size}px ${FONT}`;
+  if (!reveal) {
+    c.textAlign = 'left';
+    for (let i = 0; i < 3; i++) {
+      c.globalAlpha = i < n ? 1 : 0.25;
+      c.fillText('⭐', x + i * (size + gap), y);
+    }
+    c.globalAlpha = 1;
+    return;
+  }
+  const t = reveal.t;
+  const easeOut = (p) => 1 - Math.pow(1 - Math.max(0, Math.min(1, p)), 3);
+  c.textAlign = 'center';
   for (let i = 0; i < 3; i++) {
-    c.globalAlpha = i < n ? 1 : 0.25;
-    c.fillText('⭐', x + i * (size + gap), y);
+    let alpha, scale;
+    if (i < n) {
+      const start = STAR_D0 + i * STAR_DI;
+      if (t < start) continue;                 // まだ出さない
+      const e = easeOut((t - start) / STAR_POP);
+      scale = 1.4 - 0.4 * e;                    // 1.4 → 1.0 のオーバーシュート
+      alpha = Math.min(1, e * 1.4);
+    } else {
+      const start = STAR_D0 + n * STAR_DI;      // 獲得★のリビール完了後
+      if (t < start) continue;
+      scale = 1;
+      alpha = 0.25 * easeOut((t - start) / STAR_DIM);
+    }
+    c.save();
+    c.globalAlpha = alpha;
+    c.translate(x + i * (size + gap) + size / 2, y); // 各★の中心を基準にスケール
+    c.scale(scale, scale);
+    c.fillText('⭐', 0, 0);
+    c.restore();
   }
   c.globalAlpha = 1;
 }
@@ -393,9 +437,15 @@ function drawResult(c) {
   c.fillStyle = '#e8e2d6'; c.font = `700 ${Math.round(Math.min(28, W * 0.03))}px ${FONT}`;
   c.fillText(`${STAGE_ICON[result.stage]} ${STAGE_NAME[result.stage]}`, cx, H * 0.14 + 48);
 
-  // ★
+  // ★（順次リビール）: resultAt からの経過で 1個ずつポップイン。獲得★の出現瞬間にチャイム。
   const ss = Math.min(64, W * 0.07);
-  stars(c, cx - (ss * 3 + 12 * 2) / 2, H * 0.32, ss, result.stars, 12);
+  const revealT = nowT - resultAt;
+  for (let i = 0; i < result.stars; i++) {
+    if (!result.starChimed[i] && revealT >= STAR_D0 + i * STAR_DI) {
+      result.starChimed[i] = true; sfx.star(i);   // 1個1回だけ（未獲得★は無音）
+    }
+  }
+  stars(c, cx - (ss * 3 + 12 * 2) / 2, H * 0.32, ss, result.stars, 12, { t: revealT });
 
   // パネル（タイム・正解率・スコア＋家プログレスバー）
   const pw = Math.min(520, W * 0.6), px = cx - pw / 2, py = H * 0.42, ph = H * 0.30;
